@@ -1,6 +1,6 @@
 ---
 name: project-review
-description: Independently review a task diff for concrete defects without relying on builder reasoning.
+description: Optionally perform an independent defect review when risk, ambiguity, or the user warrants a second opinion.
 ---
-# Review
-Inspect locked task, rules, exact diff/source, and test/CI evidence. Check scope, correctness, Guardian/IDOR/privacy, LiveKit/token/network safety, recording access/retention, Discourse API compatibility, DB/performance, reconnect/jobs, and meaningful tests. Return APPROVE, REJECT, or NEEDS_HUMAN with evidence.
+# Independent review
+This skill is optional unless explicitly requested. Read the locked task, root/local rules, latest diff/source, and test/CI evidence yourself. Check scope, correctness, edge cases, auth/privacy, framework compatibility, DB/performance when relevant, and meaningful test gaps. Return APPROVE, REJECT, or NEEDS_HUMAN with concise evidence; do not manufacture style-only blockers. Review approval never substitutes for required latest-head CI GREEN.

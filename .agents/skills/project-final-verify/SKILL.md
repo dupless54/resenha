@@ -1,6 +1,6 @@
 ---
 name: project-final-verify
-description: Perform mandatory final verification of the latest independently reviewed diff.
+description: Optionally perform an independent final verification for high-risk, ambiguous, or explicitly requested changes.
 ---
-# Final verify
-After reviewer approval independently inspect latest exact diff/source. Verify scope, resolved findings, room/voice/privacy/security boundaries, evidence, and ambiguity. Return APPROVE, REJECT, or NEEDS_HUMAN. Latest-head CI remains mandatory.
+# Final verification
+This skill is optional unless the current task explicitly requires it. Inspect the latest exact diff/source yourself and verify scope, trust/architecture boundaries, test evidence, and unresolved ambiguity. Return APPROVE, REJECT, or NEEDS_HUMAN. Approval never substitutes for required latest-head CI GREEN.
