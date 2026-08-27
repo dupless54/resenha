@@ -1,0 +1,9 @@
+name = "critical"
+description = "T2 high-risk security, data-integrity, network, privacy, and public-contract work."
+model = "gpt-5.6"
+model_reasoning_effort = "high"
+developer_instructions = """
+Follow AGENTS.md and docs/ai/EFFORT_ROUTER.md.
+Correctness, privacy, security, and data integrity outrank token savings.
+Do not weaken tests.
+"""
