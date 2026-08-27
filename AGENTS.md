@@ -12,6 +12,9 @@ Current source/tests > `docs/ai/CURRENT_STATE.md` > nearest local `AGENTS.md` > 
 - tests -> `spec/AGENTS.md`
 Use the minimal three-file `docs/ai/work/<feature>/` packet for real multi-session work.
 
+## Fast task path
+For non-trivial work, use `.agents/skills/task-packet/SKILL.md` before broad reads. Use `docs/ai/REPO_MAP.md` to locate code, `COMMANDS.md` only for validation, and `DECISIONS.md` only for room/privacy/LiveKit/architecture choices. Skip the formal packet for trivial one-file edits.
+
 ## Voice/privacy/security invariants
 Resenha provides WebRTC voice rooms/direct calls inside Discourse, with optional LiveKit transport, room membership/access, moderation/reviewables, recordings/admin surfaces, hashtags/chat integration, and presence/status behavior.
 
@@ -30,4 +33,4 @@ Use current Discourse Chat/Guardian/Reviewable/Hashtag/admin/plugin APIs and Liv
 
 Stop for unresolved room-access, recording/privacy, LiveKit/security, schema/migration, retention, or product semantics. Preserve unrelated work and `.claude/settings.local.json`; no force-push/reset/clean/branch deletion/deploy/destructive DB actions. Remote writes only when explicitly authorized. Prefer targeted symbols/diffs over broad scans.
 
-Reusable procedures live under `.agents/skills/` and load on demand.
+Reusable procedures live under `.agents/skills/` and load on demand; use `task-packet` for non-trivial work.
