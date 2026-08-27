@@ -7,7 +7,7 @@ Current source/tests > `docs/ai/CURRENT_STATE.md` > nearest local `AGENTS.md` > 
 - rooms/calls/models/controllers/jobs -> `app/AGENTS.md`
 - Guardian/LiveKit/services/integration -> `lib/AGENTS.md`
 - admin dashboard -> `admin/AGENTS.md`
-- Discourse/Glimmer voice-room UI -> `assets/javascripts/AGENTS.md`
+- Discourse/Glimmer voice-room UI -> `docs/ai/scopes/frontend/AGENTS.md`
 - schema/fixtures -> `db/AGENTS.md`
 - tests -> `spec/AGENTS.md`
 Use the minimal three-file `docs/ai/work/<feature>/` packet for real multi-session work.
