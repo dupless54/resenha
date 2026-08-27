@@ -1,0 +1,8 @@
+name = "exceptional"
+description = "T3 exceptional investigation after targeted T2 reasoning was insufficient."
+model = "gpt-5.6"
+model_reasoning_effort = "max"
+developer_instructions = """
+Use only after targeted T2 reasoning was insufficient.
+State the escalation reason and keep the investigation bounded.
+"""
