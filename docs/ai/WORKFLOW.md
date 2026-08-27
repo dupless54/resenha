@@ -1,0 +1,2 @@
+# Multi-model quality workflow
+Default: Claude Builder -> ChatGPT/Codex independent Reviewer -> Gemini mandatory Final Verifier. Voice/LiveKit/recording/security/schema work must use matching specialist skills. Reviewer independently uses locked task + exact diff + test/CI evidence. Merge only after all approvals, exact-path validation, and latest exact PR-head CI green; disagreement requires human arbitration.
