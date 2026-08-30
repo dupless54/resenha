@@ -137,7 +137,7 @@ class FakeRTCPeerConnection {
     return sender;
   }
 
-  addTransceiver(kind) {
+  addTransceiver(kind, options) {
     const receiverTrack = {
       id: `${kind}-receiver-${this.transceivers.length + 1}`,
       kind,
@@ -156,7 +156,7 @@ class FakeRTCPeerConnection {
     };
 
     const transceiver = {
-      direction: "sendrecv",
+      direction: options?.direction ?? "sendrecv",
       sender,
       receiver: { track: receiverTrack },
     };
@@ -484,6 +484,7 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
 
     pretender.post("/resenha/rooms/1/join", () =>
       response({
+        participant_session_id: "session-abc",
         room: JSON.parse(JSON.stringify(this.room)),
       })
     );
@@ -1033,6 +1034,298 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
     }
   });
 
+  test("processes a batched signal envelope's events in order", async function (assert) {
+    assert.timeout(2000);
+
+    const rawTrack = createFakeTrack("raw-track");
+    const rawStream = createFakeStream("raw-stream", rawTrack);
+    const audioEnvironment = installFakeAudioEnvironment({
+      rawStream,
+      processedStream: createFakeStream(
+        "processed-stream",
+        createFakeTrack("processed-track")
+      ),
+    });
+    const signalRequests = [];
+
+    this.currentUser.id = 50;
+    this.room.room_type = "open";
+    this.room.membership.role_name = "participant";
+    this.room.active_participants = [
+      { id: this.currentUser.id, role: "participant" },
+      { id: 2, role: "participant" },
+    ];
+
+    pretender.post("/resenha/rooms/1/signal", (request) => {
+      signalRequests.push(signalPayloadFrom(request));
+      return response({});
+    });
+
+    try {
+      await this.subject.join(this.room);
+      await wait(50);
+
+      // One envelope per recipient: the offer plus its trickle candidate ride
+      // in a single ordered event batch.
+      this.rooms.emit(1, {
+        type: "signal",
+        sender_id: 2,
+        events: [
+          { type: "offer", sdp: "peer-offer" },
+          {
+            type: "candidate",
+            candidate: {
+              candidate: "candidate:1 1 UDP 2122252543 127.0.0.1 3478 typ host",
+              sdpMid: "0",
+            },
+          },
+        ],
+      });
+      await waitUntil(() => signalRequests.length === 1, 1500);
+
+      assert.deepEqual(
+        signalRequests[0],
+        { recipientId: 2, type: "answer", sdp: "fake-answer" },
+        "answers the offer delivered in a batched envelope"
+      );
+
+      const pc = FakeRTCPeerConnection.instances[0];
+      await waitUntil(() => pc.addedCandidates.length === 1, 1500);
+      assert.strictEqual(
+        pc.addedCandidates[0].candidate,
+        "candidate:1 1 UDP 2122252543 127.0.0.1 3478 typ host",
+        "applies the candidate after the offer it followed in the batch"
+      );
+    } finally {
+      audioEnvironment.restore();
+    }
+  });
+
+  // Answers the remote offer over the first (and only) peer connection and
+  // returns that connection once negotiation settled.
+  async function answerRemoteOffer(context, senderId) {
+    context.rooms.emit(1, {
+      type: "signal",
+      sender_id: senderId,
+      data: { type: "offer", sdp: `peer-${senderId}-offer` },
+    });
+    await waitUntil(() => FakeRTCPeerConnection.instances.length >= 1, 1500);
+    const pc = FakeRTCPeerConnection.instances[0];
+    await waitUntil(
+      () => pc.remoteDescription && pc.signalingState === "stable",
+      1500
+    );
+    return pc;
+  }
+
+  test("drops a microphone track published by a stage listener", async function (assert) {
+    assert.timeout(2000);
+
+    const rawTrack = createFakeTrack("raw-track");
+    const rawStream = createFakeStream("raw-stream", rawTrack);
+    const audioEnvironment = installFakeAudioEnvironment({
+      rawStream,
+      processedStream: createFakeStream(
+        "processed-stream",
+        createFakeTrack("processed-track")
+      ),
+    });
+
+    // A speaker keeps a connection to every listener so they can receive the
+    // stage — the exact connection a modified listener client can abuse to
+    // attach a microphone track the server would never let it unmute.
+    this.room.membership = { role_name: "speaker" };
+    this.room.active_participants = [
+      { id: this.currentUser.id, role: "speaker" },
+      { id: 2, role: "listener" },
+    ];
+
+    try {
+      await this.subject.join(this.room);
+      await wait(50);
+
+      const pc = await answerRemoteOffer(this, 2);
+
+      let stopped = false;
+      const remoteTrack = createFakeTrack("listener-mic");
+      remoteTrack.stop = () => (stopped = true);
+      pc.ontrack({
+        streams: [createFakeStream("listener-stream", remoteTrack)],
+        track: remoteTrack,
+      });
+      await wait(10);
+
+      assert.strictEqual(
+        this.subject.remoteStreamsFor(1).length,
+        0,
+        "audio from a role that cannot publish is never registered or played"
+      );
+      assert.true(stopped, "the disallowed track is stopped");
+    } finally {
+      audioEnvironment.restore();
+    }
+  });
+
+  test("plays a stage speaker's microphone and keeps a listener's transceivers receive-only", async function (assert) {
+    assert.timeout(2000);
+
+    const rawTrack = createFakeTrack("raw-track");
+    const rawStream = createFakeStream("raw-stream", rawTrack);
+    const audioEnvironment = installFakeAudioEnvironment({
+      rawStream,
+      processedStream: createFakeStream(
+        "processed-stream",
+        createFakeTrack("processed-track")
+      ),
+    });
+
+    // The default room: current user is a listener, user 2 is a speaker.
+    try {
+      await this.subject.join(this.room);
+      await wait(50);
+
+      const pc = await answerRemoteOffer(this, 2);
+
+      assert.true(
+        pc.transceivers.every(
+          (transceiver) => transceiver.direction === "recvonly"
+        ),
+        "a listener's pre-negotiated transceivers never advertise sending"
+      );
+
+      const remoteTrack = createFakeTrack("speaker-mic");
+      pc.ontrack({
+        streams: [createFakeStream("speaker-stream", remoteTrack)],
+        track: remoteTrack,
+      });
+      await wait(10);
+
+      assert.true(
+        this.subject
+          .remoteStreamsFor(1)
+          .some((stream) =>
+            stream.getTracks().some((track) => track.id === "speaker-mic")
+          ),
+        "audio from a role allowed to publish plays normally"
+      );
+    } finally {
+      audioEnvironment.restore();
+    }
+  });
+
+  test("drops a video track when the room does not allow video", async function (assert) {
+    assert.timeout(2000);
+
+    const rawTrack = createFakeTrack("raw-track");
+    const rawStream = createFakeStream("raw-stream", rawTrack);
+    const audioEnvironment = installFakeAudioEnvironment({
+      rawStream,
+      processedStream: createFakeStream(
+        "processed-stream",
+        createFakeTrack("processed-track")
+      ),
+    });
+
+    this.room.room_type = "open";
+    this.room.membership.role_name = "participant";
+    this.room.video_allowed = false;
+    this.room.active_participants = [
+      { id: this.currentUser.id, role: "participant" },
+      { id: 2, role: "participant" },
+    ];
+
+    try {
+      await this.subject.join(this.room);
+      await wait(50);
+
+      const pc = await answerRemoteOffer(this, 2);
+
+      pc.ontrack({ streams: [], track: createFakeTrack("rogue-cam", "video") });
+      await wait(10);
+
+      assert.strictEqual(
+        this.subject.remoteStreamsFor(1).length,
+        0,
+        "video is dropped while the room's media policy disallows it"
+      );
+
+      this.room.video_allowed = true;
+      pc.ontrack({ streams: [], track: createFakeTrack("real-cam", "video") });
+      await wait(10);
+
+      assert.true(
+        this.subject
+          .remoteStreamsFor(1)
+          .some((stream) =>
+            stream.getTracks().some((track) => track.id === "real-cam")
+          ),
+        "video registers once the room allows it"
+      );
+    } finally {
+      audioEnvironment.restore();
+    }
+  });
+
+  test("a roster refresh drops media from a participant demoted to listener", async function (assert) {
+    assert.timeout(2000);
+
+    const rawTrack = createFakeTrack("raw-track");
+    const rawStream = createFakeStream("raw-stream", rawTrack);
+    const audioEnvironment = installFakeAudioEnvironment({
+      rawStream,
+      processedStream: createFakeStream(
+        "processed-stream",
+        createFakeTrack("processed-track")
+      ),
+    });
+
+    this.room.membership = { role_name: "speaker" };
+    this.room.active_participants = [
+      { id: this.currentUser.id, role: "speaker" },
+      { id: 2, role: "speaker" },
+    ];
+
+    try {
+      await this.subject.join(this.room);
+      await wait(50);
+
+      const pc = await answerRemoteOffer(this, 2);
+
+      const remoteTrack = createFakeTrack("peer-2-mic");
+      pc.ontrack({
+        streams: [createFakeStream("peer-2-stream", remoteTrack)],
+        track: remoteTrack,
+      });
+      await wait(10);
+
+      assert.strictEqual(
+        this.subject.remoteStreamsFor(1).length,
+        1,
+        "the other speaker's audio plays while both hold speaking roles"
+      );
+
+      // Demotion arriving as a roster refresh, not a role_change message: the
+      // connection survives (a speaker still transmits to the listener) but
+      // the demoted participant's registered media must stop immediately.
+      this.rooms.emit(1, {
+        type: "participants",
+        participants: [
+          { id: this.currentUser.id, role: "speaker" },
+          { id: 2, role: "listener" },
+        ],
+      });
+      await wait(20);
+
+      assert.strictEqual(
+        this.subject.remoteStreamsFor(1).length,
+        0,
+        "the demoted participant's registered media is dropped"
+      );
+    } finally {
+      audioEnvironment.restore();
+    }
+  });
+
   test("slow mic, lower-id local user: offer queued during the permission prompt connects via rollback", async function (assert) {
     assert.timeout(2000);
 
@@ -1289,13 +1582,14 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
       ),
     });
     const signalRequests = [];
+    const signalSessionIds = [];
 
     // The regression: two peers join near-simultaneously. The other peer
     // gathers and offers before our presence broadcast lists it, so
     // active_participants still only contains us when its offer arrives.
-    // Gating on presence used to silently drop that offer and strand the
-    // connection; a targeted offer is implicit proof the sender shares the
-    // room, so we must answer it.
+    // Gating on the local roster used to silently drop that offer and strand
+    // the connection; the relay is server-attested (the server only relays
+    // for senders holding a live participant session), so we must answer it.
     this.currentUser.id = 50;
     this.room.room_type = "open";
     this.room.membership.role_name = "participant";
@@ -1305,6 +1599,9 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
 
     pretender.post("/resenha/rooms/1/signal", (request) => {
       signalRequests.push(signalPayloadFrom(request));
+      signalSessionIds.push(
+        new URLSearchParams(request.requestBody).get("participant_session_id")
+      );
       return response({});
     });
 
@@ -1321,6 +1618,7 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
       this.rooms.emit(1, {
         type: "signal",
         sender_id: 2,
+        sender: { id: 2, username: "early-bird" },
         data: { type: "offer", sdp: "early-offer" },
       });
       await waitUntil(() => signalRequests.length === 1, 1500);
@@ -1329,6 +1627,17 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
         signalRequests[0],
         { recipientId: 2, type: "answer", sdp: "fake-answer" },
         "answers the early offer despite the sender being absent from presence"
+      );
+      assert.strictEqual(
+        signalSessionIds[0],
+        "session-abc",
+        "authenticates the answer with the join's participant session"
+      );
+      assert.true(
+        (this.room.active_participants || []).some(
+          (participant) => Number(participant.id) === 2
+        ),
+        "renders the server-serialized sender as a provisional participant"
       );
 
       const pc = FakeRTCPeerConnection.instances[0];
@@ -1842,7 +2151,14 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
       const leaveRequests = stateRequests.slice(requestsBeforeLeave);
       assert.deepEqual(
         leaveRequests,
-        [{ watching: "false", video: "false", screen: "false" }],
+        [
+          {
+            watching: "false",
+            video: "false",
+            screen: "false",
+            participant_session_id: "session-abc",
+          },
+        ],
         "page leave sends one combined state request so concurrent " +
           "read-modify-write updates cannot resurrect stale publisher flags"
       );
@@ -2011,6 +2327,9 @@ module("Resenha | Unit | Service | resenha-webrtc", function (hooks) {
 
     this.room.room_type = "open";
     this.room.video_enabled = true;
+    // The serializer's combined room+site flag; the receive-side track
+    // policy consults it before registering the remote video track.
+    this.room.video_allowed = true;
     this.room.membership = { role_name: "participant" };
     this.room.active_participants = [
       { id: this.currentUser.id, role: "participant" },
