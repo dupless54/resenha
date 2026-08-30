@@ -4,6 +4,9 @@ export default class SignalingManager {
   static #defaultCandidateBatchDelayMs = 75;
   static #defaultCandidateBatchSize = 5;
   static #defaultHttpBatchDelayMs = 200;
+  // The server rejects batches with more than 25 events for one recipient;
+  // flushing at 20 keeps a candidate batch appended mid-window under that cap.
+  static #httpFlushEventThreshold = 20;
 
   static peerKey(roomId, userId) {
     return `${roomId}:${userId}`;
@@ -46,23 +49,31 @@ export default class SignalingManager {
 
   #isActiveRoom;
   #hasPeer;
+  #getParticipantSessionId;
   #requestSignals;
 
   constructor({
     isActiveRoom,
     hasPeer,
-    requestSignals = (roomId, payload) =>
-      ajax(`/resenha/rooms/${roomId}/signal`, {
-        type: "POST",
-        data: { payload },
-      }),
+    getParticipantSessionId = () => undefined,
+    requestSignals,
     candidateBatchDelayMs = SignalingManager.#defaultCandidateBatchDelayMs,
     candidateBatchSize = SignalingManager.#defaultCandidateBatchSize,
     httpBatchDelayMs = SignalingManager.#defaultHttpBatchDelayMs,
   }) {
     this.#isActiveRoom = isActiveRoom;
     this.#hasPeer = hasPeer;
-    this.#requestSignals = requestSignals;
+    this.#getParticipantSessionId = getParticipantSessionId;
+    this.#requestSignals =
+      requestSignals ??
+      ((roomId, payload) =>
+        ajax(`/resenha/rooms/${roomId}/signal`, {
+          type: "POST",
+          data: {
+            payload,
+            participant_session_id: this.#getParticipantSessionId(roomId),
+          },
+        }));
     this.#candidateBatchDelayMs = candidateBatchDelayMs;
     this.#candidateBatchSize = candidateBatchSize;
     this.#httpBatchDelayMs = httpBatchDelayMs;
@@ -185,7 +196,20 @@ export default class SignalingManager {
       entry.pending.push({ recipientId, resolve, reject });
     });
 
-    this.#scheduleHttpFlush(roomId);
+    const queuedEvents = roomQueue.get(recipientId);
+    if (queuedEvents.length >= SignalingManager.#httpFlushEventThreshold) {
+      const timer = this.#httpSignalFlushTimers.get(roomId);
+      if (timer) {
+        clearTimeout(timer);
+        this.#httpSignalFlushTimers.delete(roomId);
+      }
+      this.#flushHttp(roomId).catch((error) => {
+        // eslint-disable-next-line no-console
+        console.warn("[resenha] failed to flush HTTP signal queue", error);
+      });
+    } else {
+      this.#scheduleHttpFlush(roomId);
+    }
 
     return promise;
   }

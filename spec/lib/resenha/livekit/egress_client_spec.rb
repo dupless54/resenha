@@ -36,6 +36,7 @@ RSpec.describe Resenha::Livekit::EgressClient do
 
   describe ".start_room_composite" do
     it "POSTs the room name and file output with a roomRecord-granted token" do
+      SiteSetting.resenha_video_enabled = false
       stub = twirp_stub("StartRoomCompositeEgress").to_return(body: { egressId: "EG_1" }.to_json)
 
       result = described_class.start_room_composite(room, filepath: "resenha/test-abc123")
@@ -82,13 +83,15 @@ RSpec.describe Resenha::Livekit::EgressClient do
       ).to have_been_made.once
     end
 
-    it "returns a structured error on an error response" do
-      twirp_stub("StartRoomCompositeEgress").to_return(status: 500, body: "egress unavailable")
+    it "returns a structured error on an error response, without the upstream body" do
+      upstream_body = "egress unavailable"
+      twirp_stub("StartRoomCompositeEgress").to_return(status: 500, body: upstream_body)
 
       result = described_class.start_room_composite(room, filepath: "resenha/test-abc123")
 
       expect(result[:ok]).to eq(false)
-      expect(result[:error]).to include("HTTP 500")
+      expect(result[:error]).to eq("HTTP 500")
+      expect(result[:error]).not_to include(upstream_body)
     end
 
     it "returns a structured error instead of raising on a timeout" do

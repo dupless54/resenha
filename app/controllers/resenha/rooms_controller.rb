@@ -2,6 +2,17 @@
 
 module Resenha
   class RoomsController < ApplicationController
+    # Signal budgets are accounted in relayed events (not HTTP requests), so a
+    # legitimate full-room Trickle ICE burst — one offer plus batched
+    # candidates to every peer, with headroom for an ICE restart — passes
+    # while sustained signaling beyond it is rejected before any MessageBus
+    # work happens.
+    SIGNAL_REQUESTS_PER_USER = 30 # per 10 seconds
+    SIGNAL_EVENTS_PER_USER_PER_MINUTE = 5_000
+    SIGNAL_EVENTS_PER_ROOM_PER_MINUTE = 100_000
+
+    STATE_FIELDS = %i[muted deafened video screen watching transcribing]
+
     # Anonymous visitors may browse the directory; the guardian still limits the
     # listing to public rooms, and only when access is open to everyone.
     skip_before_action :ensure_logged_in, only: :index
@@ -105,6 +116,42 @@ module Resenha
 
     def join
       guardian.ensure_can_join_resenha_room!(@room)
+      RateLimiter.new(current_user, "resenha-joins", 30, 1.minute).performed!
+
+      # A repeated join carrying the live participant session (a UI retry, a
+      # duplicated request) refreshes the existing grant instead of re-running
+      # join side effects: no session rotation, no second analytics session,
+      # no badge/invite re-fires, no roster rebroadcast.
+      if repeat_join?
+        transport = Resenha::ParticipantTracker.pinned_transport(@room.id) || "mesh"
+
+        livekit = nil
+        if transport == "livekit"
+          livekit = mint_livekit_payload
+          if livekit.nil?
+            return render_json_error(I18n.t("resenha.errors.livekit_unavailable"), status: 503)
+          end
+        end
+
+        Resenha::ParticipantTracker.add(@room.id, current_user.id)
+        Resenha::ParticipantTracker.refresh_participant_session(@room.id, current_user.id)
+        Resenha::ParticipantTracker.refresh_transport_pin(@room.id)
+
+        payload = {
+          transport: transport,
+          participant_session_id: params[:participant_session_id],
+          ice: Resenha::IceConfig.payload(current_user),
+          room:
+            Resenha::RoomSerializer.new(
+              @room,
+              scope: guardian,
+              root: false,
+              include_visit_count: true,
+            ).as_json,
+        }
+        payload[:livekit] = livekit if livekit
+        return render json: payload
+      end
 
       # Resolved before presence is added, so a LiveKit failure rejects the
       # join without leaving the user in the roster.
@@ -143,32 +190,71 @@ module Resenha
       livekit = nil if transport == "mesh"
 
       Resenha::ParticipantTracker.clear_left(@room.id, current_user.id)
-      Resenha::ParticipantTracker.add(@room.id, current_user.id)
+
+      admission =
+        Resenha::ParticipantTracker.add_within_capacity(
+          @room.id,
+          current_user.id,
+          @room.effective_max_participants,
+        )
+      if admission == :full
+        return render_json_error(I18n.t("resenha.errors.room_full"), status: 422)
+      end
+
+      # A joiner already in the roster but without the live session proof (a
+      # reloaded tab, a second device — or a client replaying this endpoint)
+      # takes over the existing grant rather than re-running first-join side
+      # effects: the session still rotates so the new tab gains signaling
+      # authority, but the open analytics row is reused and badge/invite
+      # hooks don't re-fire. Otherwise every replayed join is a free
+      # analytics insert and roster broadcast.
+      takeover = admission == :existing
+      previous_metadata =
+        takeover ? Resenha::ParticipantTracker.get_metadata(@room.id, current_user.id) : {}
+
+      participant_session_id =
+        Resenha::ParticipantTracker.create_participant_session!(@room.id, current_user.id)
 
       membership = @room.room_memberships.find_by(user_id: current_user.id)
       role = membership&.role_name || "participant"
       metadata = { role: role, last_heartbeat_at: Time.now.to_f }
 
       if SiteSetting.resenha_analytics_enabled
-        session = Resenha::Session.create!(user: current_user, room: @room, joined_at: Time.current)
+        session = nil
+        if previous_metadata[:session_id]
+          session =
+            Resenha::Session.find_by(
+              id: previous_metadata[:session_id],
+              user_id: current_user.id,
+              room_id: @room.id,
+              left_at: nil,
+            )
+        end
+        session ||=
+          Resenha::Session.create!(user: current_user, room: @room, joined_at: Time.current)
         metadata[:session_id] = session.id
       end
 
       metadata[:skip_status] = true if params[:skip_status].present?
       Resenha::ParticipantTracker.update_metadata(@room.id, current_user.id, metadata)
-      Resenha::RoomBroadcaster.publish_participants(@room)
 
-      participants = Resenha::ParticipantTracker.list(@room.id)
-      Resenha::BadgeGranterHooks.on_join(current_user, @room, participants)
+      if takeover
+        Resenha::RoomBroadcaster.publish_participants_if_changed(@room)
+      else
+        Resenha::RoomBroadcaster.publish_participants(@room)
 
-      if params[:invited_by].present?
-        invite =
-          Resenha::Invite.redeem!(
-            room: @room,
-            user: current_user,
-            inviter_username: params[:invited_by],
-          )
-        Resenha::BadgeGranterHooks.on_invite_redeemed(invite) if invite
+        participants = Resenha::ParticipantTracker.list(@room.id)
+        Resenha::BadgeGranterHooks.on_join(current_user, @room, participants)
+
+        if params[:invited_by].present?
+          invite =
+            Resenha::Invite.redeem!(
+              room: @room,
+              user: current_user,
+              inviter_username: params[:invited_by],
+            )
+          Resenha::BadgeGranterHooks.on_invite_redeemed(invite) if invite
+        end
       end
 
       # A join settles this room's pending invitation/call notifications: the
@@ -183,6 +269,7 @@ module Resenha
 
       payload = {
         transport: transport,
+        participant_session_id: participant_session_id,
         ice: Resenha::IceConfig.payload(current_user),
         room:
           Resenha::RoomSerializer.new(
@@ -213,6 +300,10 @@ module Resenha
       # call, so an explicit token request voids any leave/kick tombstone.
       Resenha::ParticipantTracker.clear_left(@room.id, current_user.id)
       Resenha::ParticipantTracker.add(@room.id, current_user.id)
+      # The session may have expired along with the lapsed presence — mint a
+      # fresh one so heartbeat/state keep working after the reconnect.
+      participant_session_id =
+        Resenha::ParticipantTracker.create_participant_session!(@room.id, current_user.id)
       metadata = Resenha::ParticipantTracker.get_metadata(@room.id, current_user.id)
       metadata[:last_heartbeat_at] = Time.now.to_f
       Resenha::ParticipantTracker.update_metadata(@room.id, current_user.id, metadata)
@@ -224,7 +315,7 @@ module Resenha
         return render_json_error(I18n.t("resenha.errors.livekit_unavailable"), status: 503)
       end
 
-      render json: livekit
+      render json: livekit.merge(participant_session_id: participant_session_id)
     end
 
     def start_recording
@@ -244,6 +335,19 @@ module Resenha
 
     def leave
       guardian.ensure_can_join_resenha_room!(@room)
+
+      # A leave from a stale tab — carrying a participant session that a newer
+      # join has since superseded — must not tear down the presence and
+      # session the newer tab now owns.
+      if params[:participant_session_id].present? &&
+           !Resenha::ParticipantTracker.valid_participant_session?(
+             @room.id,
+             current_user.id,
+             params[:participant_session_id],
+           )
+        return head :no_content
+      end
+
       session = close_session_for(@room.id, current_user.id)
       Resenha::ParticipantTracker.mark_left(@room.id, current_user.id)
       Resenha::ParticipantTracker.remove(@room.id, current_user.id)
@@ -266,7 +370,10 @@ module Resenha
         return head :no_content
       end
 
+      ensure_participant_session!
+
       Resenha::ParticipantTracker.add(@room.id, current_user.id)
+      Resenha::ParticipantTracker.refresh_participant_session(@room.id, current_user.id)
 
       metadata = Resenha::ParticipantTracker.get_metadata(@room.id, current_user.id)
       metadata[:last_heartbeat_at] = Time.now.to_f
@@ -316,6 +423,12 @@ module Resenha
 
     def state
       guardian.ensure_can_join_resenha_room!(@room)
+      ensure_participant_session!
+      RateLimiter.new(current_user, "resenha-room-state", 40, 10.seconds).performed!
+
+      if STATE_FIELDS.none? { |field| params.key?(field) }
+        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.state_change_required"))
+      end
 
       bool = ActiveModel::Type::Boolean.new
       wants_unmute = params.key?(:muted) && !bool.cast(params[:muted])
@@ -339,12 +452,18 @@ module Resenha
       end
 
       metadata = Resenha::ParticipantTracker.get_metadata(@room.id, current_user.id)
+      previous_metadata = metadata.dup
       metadata[:is_muted] = bool.cast(params[:muted]) if params.key?(:muted)
       metadata[:is_deafened] = bool.cast(params[:deafened]) if params.key?(:deafened)
       metadata[:is_video_on] = bool.cast(params[:video]) if params.key?(:video)
       metadata[:is_screen_sharing] = bool.cast(params[:screen]) if params.key?(:screen)
       metadata[:watching_video] = bool.cast(params[:watching]) if params.key?(:watching)
       metadata[:is_transcribing] = bool.cast(params[:transcribing]) if params.key?(:transcribing)
+
+      # A request that changes nothing must not become a full-roster
+      # rebroadcast to every participant.
+      return head :no_content if metadata == previous_metadata
+
       Resenha::ParticipantTracker.update_metadata(@room.id, current_user.id, metadata)
 
       Resenha::RoomBroadcaster.publish_participants(@room)
@@ -420,14 +539,9 @@ module Resenha
 
     def request_to_speak
       guardian.ensure_can_request_to_speak_in_resenha_room!(@room)
-
-      if Resenha::ParticipantTracker.user_ids(@room.id).exclude?(current_user.id)
-        raise Discourse::InvalidAccess.new(
-                :resenha_speak_request_requires_presence,
-                nil,
-                custom_message: "resenha.errors.speak_request_requires_presence",
-              )
-      end
+      # The session (not the eventually-consistent roster) is what proves the
+      # user is actually in the call.
+      ensure_participant_session!
 
       if Resenha::ParticipantTracker.raise_hand(@room.id, current_user.id)
         raised_at =
@@ -450,7 +564,10 @@ module Resenha
 
       if target_id == current_user.id
         guardian.ensure_can_join_resenha_room!(@room)
+        ensure_participant_session!
       else
+        # A moderator dismissing someone else's raised hand is a management
+        # action and must not require the moderator to be in the call.
         guardian.ensure_can_manage_resenha_room!(@room)
       end
 
@@ -465,61 +582,55 @@ module Resenha
 
     def signal
       guardian.ensure_can_join_resenha_room!(@room)
+      # Room eligibility alone is not enough: signaling authority comes from
+      # the server-attested session minted by join, so an eligible user who
+      # never joined can't reach anyone's media stack.
+      ensure_participant_session!
+
+      RateLimiter.new(
+        current_user,
+        "resenha-signals",
+        SIGNAL_REQUESTS_PER_USER,
+        10.seconds,
+      ).performed!
 
       # Defense in depth: LiveKit rooms never exchange WebRTC signals.
       if Resenha::ParticipantTracker.pinned_transport(@room.id) == "livekit"
         return render_json_error(I18n.t("resenha.errors.livekit_no_signaling"), status: 422)
       end
 
-      payload =
-        params
-          .require(:payload)
-          .permit(
-            :type,
-            :sdp,
-            :recipient_id,
-            candidate: {
-            },
-            metadata: {
-            },
-            events: [:type, :sdp, { candidate: {}, metadata: {} }],
-            messages: [
-              :recipient_id,
-              :type,
-              :sdp,
-              {
-                candidate: {
-                },
-                metadata: {
-                },
-                events: [:type, :sdp, { candidate: {}, metadata: {} }],
-              },
-            ],
-          )
-          .to_h
-          .deep_symbolize_keys
-
-      if payload.blank?
+      raw_payload = params[:payload]
+      raw_payload = raw_payload.to_unsafe_h if raw_payload.respond_to?(:to_unsafe_h)
+      if raw_payload.blank?
         raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.missing_payload"))
       end
 
-      relay = Resenha::SignalRelay.new(@room)
-      messages = extract_batched_messages(payload)
-      recipient_id = payload[:recipient_id].to_i
-
-      if recipient_id.positive?
-        events = extract_signal_events(payload)
-        messages << { recipient_id: recipient_id, events: events } if events.present?
-      end
-
+      messages = Resenha::SignalValidator.parse!(raw_payload, room: @room)
       if messages.blank?
         raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.missing_payload"))
       end
 
+      total_events = messages.sum { |message| message[:events].size }
+      Resenha::ControlPlaneLimiter.perform!(
+        "signal-events:user:#{current_user.id}",
+        limit: SIGNAL_EVENTS_PER_USER_PER_MINUTE,
+        period: 1.minute,
+        weight: total_events,
+      )
+      Resenha::ControlPlaneLimiter.perform!(
+        "signal-events:room:#{@room.id}",
+        limit: SIGNAL_EVENTS_PER_ROOM_PER_MINUTE,
+        period: 1.minute,
+        weight: total_events,
+      )
+
+      relay = Resenha::SignalRelay.new(@room)
       messages.each do |message|
-        message[:events].each do |event|
-          relay.publish!(from: current_user, recipient_id: message[:recipient_id], data: event)
-        end
+        relay.publish!(
+          from: current_user,
+          recipient_id: message[:recipient_id],
+          events: message[:events],
+        )
       end
 
       head :no_content
@@ -562,6 +673,35 @@ module Resenha
     end
 
     private
+
+    def ensure_participant_session!
+      if Resenha::ParticipantTracker.valid_participant_session?(
+           @room.id,
+           current_user.id,
+           params[:participant_session_id],
+         )
+        return
+      end
+
+      # Sustained probing with a missing or stale session is cut off before it
+      # can accumulate into free Redis/roster work.
+      RateLimiter.new(current_user, "resenha-session-denied", 30, 1.minute).performed!
+
+      raise Discourse::InvalidAccess.new(
+              :resenha_participant_session_required,
+              nil,
+              custom_message: "resenha.errors.participant_session_required",
+            )
+    end
+
+    def repeat_join?
+      params[:participant_session_id].present? &&
+        Resenha::ParticipantTracker.valid_participant_session?(
+          @room.id,
+          current_user.id,
+          params[:participant_session_id],
+        ) && Resenha::ParticipantTracker.user_ids(@room.id).include?(current_user.id)
+    end
 
     def mark_invitation_notifications_read!
       notification_ids =
@@ -650,7 +790,6 @@ module Resenha
           :livekit_enabled,
           :chat_channel_id,
           :chat_idle_minutes,
-          :chat_thread_title_template,
           :max_quality_profile,
         )
       if permitted.key?(:room_type)
@@ -662,65 +801,6 @@ module Resenha
         ]
       end
       permitted
-    end
-
-    def extract_batched_messages(payload)
-      normalize_collection(payload[:messages]).filter_map do |raw_message|
-        message = normalize_signal_payload(raw_message)
-        next if message.blank?
-
-        recipient_id = message[:recipient_id].to_i
-        next unless recipient_id.positive?
-
-        events = extract_signal_events(message)
-        next if events.blank?
-
-        { recipient_id: recipient_id, events: events }
-      end
-    end
-
-    def extract_signal_events(container)
-      events =
-        normalize_collection(container[:events]).filter_map do |event|
-          normalized = normalize_signal_payload(event)
-          normalized.presence
-        end
-
-      return events if events.present?
-
-      fallback = container.except(:recipient_id, :events, :messages).presence
-      fallback ? [fallback] : []
-    end
-
-    def normalize_signal_payload(value)
-      return {} if value.blank?
-
-      if value.respond_to?(:to_h)
-        value.to_h.deep_symbolize_keys
-      else
-        value
-      end
-    rescue NoMethodError, TypeError
-      {}
-    end
-
-    def normalize_collection(raw)
-      return [] if raw.blank?
-
-      array =
-        if raw.is_a?(Array)
-          raw
-        elsif raw.respond_to?(:to_unsafe_h)
-          raw.to_unsafe_h
-        elsif raw.respond_to?(:to_h)
-          raw.to_h
-        else
-          Array.wrap(raw)
-        end
-
-      return array if array.is_a?(Array)
-
-      array.sort_by { |key, _| key.to_s }.map { |_, value| value }
     end
 
     def load_room

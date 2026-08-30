@@ -12,6 +12,8 @@ export default class LivekitCoordinator {
   #rosterIds = new Map();
 
   #getCurrentUserId;
+  #getParticipantSessionId;
+  #onParticipantSessionRenewed;
   #getLocalStream;
   #getLocalVideoTrack;
   #getLocalScreenAudioTrack;
@@ -32,6 +34,8 @@ export default class LivekitCoordinator {
 
   constructor({
     getCurrentUserId,
+    getParticipantSessionId = () => undefined,
+    onParticipantSessionRenewed = () => {},
     getLocalStream,
     getLocalVideoTrack,
     getLocalScreenAudioTrack,
@@ -51,6 +55,8 @@ export default class LivekitCoordinator {
     showNotice,
   }) {
     this.#getCurrentUserId = getCurrentUserId;
+    this.#getParticipantSessionId = getParticipantSessionId;
+    this.#onParticipantSessionRenewed = onParticipantSessionRenewed;
     this.#getLocalStream = getLocalStream;
     this.#getLocalVideoTrack = getLocalVideoTrack;
     this.#getLocalScreenAudioTrack = getLocalScreenAudioTrack;
@@ -126,7 +132,12 @@ export default class LivekitCoordinator {
     }
 
     if (failureMessage) {
-      ajax(`/resenha/rooms/${room.id}/leave`, { type: "DELETE" });
+      ajax(`/resenha/rooms/${room.id}/leave`, {
+        type: "DELETE",
+        data: {
+          participant_session_id: this.#getParticipantSessionId(room.id),
+        },
+      });
       this.#unwindFailedJoin(room.id);
       this.#showError(failureMessage);
       return false;
@@ -136,7 +147,12 @@ export default class LivekitCoordinator {
       // Superseded while connecting; the superseding join already tore this
       // room down (disconnecting the session), so only the server needs
       // telling.
-      ajax(`/resenha/rooms/${room.id}/leave`, { type: "DELETE" });
+      ajax(`/resenha/rooms/${room.id}/leave`, {
+        type: "DELETE",
+        data: {
+          participant_session_id: this.#getParticipantSessionId(room.id),
+        },
+      });
       return false;
     }
 
@@ -158,8 +174,18 @@ export default class LivekitCoordinator {
       onDisconnected: (kind, reason) =>
         this.#handleDisconnected(roomId, kind, reason),
       onConnectionChange: () => this.#bumpConnectionRevision(),
-      mintToken: () =>
-        ajax(`/resenha/rooms/${roomId}/livekit_token`, { type: "POST" }),
+      mintToken: async () => {
+        const response = await ajax(`/resenha/rooms/${roomId}/livekit_token`, {
+          type: "POST",
+        });
+        // The token endpoint re-establishes presence, so it rotates the
+        // participant session heartbeat/state must keep sending.
+        this.#onParticipantSessionRenewed(
+          roomId,
+          response?.participant_session_id
+        );
+        return response;
+      },
       getQualityTiers: () => this.#getQualityTiers(roomId),
     });
   }
