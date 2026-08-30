@@ -15,19 +15,21 @@ module Resenha
         user_id = user_id.to_i
         return if user_id <= 0
 
-        # Joining and heartbeat refreshes share this path. Serialize the small
-        # critical section so two simultaneous joins cannot both claim the last
-        # slot after observing the same participant count.
+        # Heartbeats overwhelmingly refresh an existing member. Keep that hot
+        # path lock-free; only a new slot claim needs serialization.
+        if user_ids(room_id).include?(user_id)
+          store_presence(room_id, user_id)
+          return
+        end
+
+        # Serialize the small admission critical section so two simultaneous
+        # joins cannot both claim the last slot after observing the same count.
         DistributedMutex.synchronize(
           "resenha_room_#{room_id}_participant_add",
           validity: PARTICIPANT_ADD_MUTEX_VALIDITY,
         ) do
           ensure_capacity!(room_id, user_id)
-
-          redis.zadd(key(room_id), Time.now.to_f, user_id)
-          redis.expire(key(room_id), SAFETY_TTL)
-          redis.expire(metadata_key(room_id), SAFETY_TTL)
-          touch_recently_active(room_id)
+          store_presence(room_id, user_id)
         end
       rescue Redis::CommandError => e
         raise if e.message.exclude?("WRONGTYPE") || migrated
@@ -267,6 +269,13 @@ module Resenha
         return if participants.include?(user_id) || participants.length < limit
 
         raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.room_full"))
+      end
+
+      def store_presence(room_id, user_id)
+        redis.zadd(key(room_id), Time.now.to_f, user_id)
+        redis.expire(key(room_id), SAFETY_TTL)
+        redis.expire(metadata_key(room_id), SAFETY_TTL)
+        touch_recently_active(room_id)
       end
 
       def redis
