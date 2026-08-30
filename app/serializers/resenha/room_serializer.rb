@@ -16,6 +16,8 @@ module Resenha
                :member_count,
                :message_bus_last_id,
                :active_participants,
+               :effective_max_participants,
+               :full,
                :creator_id,
                :can_manage,
                :can_invite,
@@ -79,6 +81,15 @@ module Resenha
           .as_json
           .merge(participant_metadata[user.id] || {})
       end
+    end
+
+    def effective_max_participants
+      object.participant_limit_for(expected_transport)
+    end
+
+    def full
+      effective_max_participants.present? &&
+        tracked_participants.size >= effective_max_participants
     end
 
     def room_type
@@ -153,8 +164,11 @@ module Resenha
     # warn about mesh's IP exposure before joining, and a race that flips
     # mesh → livekit only makes the warning over-cautious.
     def expected_transport
-      Resenha::ParticipantTracker.pinned_transport(object.id) ||
-        (Resenha::Livekit.available_for?(object) ? "livekit" : "mesh")
+      return @expected_transport if defined?(@expected_transport)
+
+      @expected_transport =
+        Resenha::ParticipantTracker.pinned_transport(object.id) ||
+          (Resenha::Livekit.available_for?(object) ? "livekit" : "mesh")
     end
 
     # Not gated per user: an active recording is something everyone who can
