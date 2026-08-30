@@ -33,7 +33,7 @@ plugins:
   resenha_participant_ttl_seconds:
     default: 30
   resenha_max_room_participants:
-    default: 50
+    default: 4
     min: 2
     max: 200
   resenha_stun_servers:
