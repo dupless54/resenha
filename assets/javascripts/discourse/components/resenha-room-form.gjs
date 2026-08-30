@@ -6,6 +6,7 @@ import { service } from "@ember/service";
 import BackButton from "discourse/components/back-button";
 import Form from "discourse/components/form";
 import { popupAjaxError } from "discourse/lib/ajax-error";
+import { participantValidation } from "discourse/plugins/resenha/discourse/lib/resenha/room-capacity";
 import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
 
@@ -68,8 +69,18 @@ export default class ResenhaRoomForm extends Component {
     }
   }
 
-  get maxParticipantsValidation() {
-    return "integer|number:2,200";
+  get openMaxParticipantsValidation() {
+    return participantValidation(
+      this.siteSettings.resenha_max_room_participants,
+      "open"
+    );
+  }
+
+  get stageMaxParticipantsValidation() {
+    return participantValidation(
+      this.siteSettings.resenha_max_room_participants,
+      "stage"
+    );
   }
 
   isStageType(roomType) {
@@ -259,7 +270,11 @@ export default class ResenhaRoomForm extends Component {
           @name="max_participants"
           @title={{i18n "resenha.admin.room.max_participants"}}
           @description={{i18n "resenha.admin.room.max_participants_help"}}
-          @validation={{this.maxParticipantsValidation}}
+          @validation={{if
+            (this.isStageType data.room_type)
+            this.stageMaxParticipantsValidation
+            this.openMaxParticipantsValidation
+          }}
           as |field|
         >
           <field.Control />
