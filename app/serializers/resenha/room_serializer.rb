@@ -11,6 +11,8 @@ module Resenha
                :ephemeral,
                :room_type,
                :max_participants,
+               :effective_max_participants,
+               :full,
                :created_at,
                :updated_at,
                :member_count,
@@ -62,6 +64,18 @@ module Resenha
 
     def member_count
       object.room_memberships.size
+    end
+
+    def effective_max_participants
+      object.effective_max_participants
+    end
+
+    # This is an admission-state snapshot, not client authority. Join still
+    # performs the atomic Redis capacity check, so a stale false value can
+    # never overfill a room and a current participant can still refresh/take
+    # over their already-granted slot when the room is full.
+    def full
+      tracked_participants.length >= effective_max_participants
     end
 
     # Read before active_participants (attributes serialize in declaration
