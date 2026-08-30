@@ -1,0 +1,2 @@
+# Resenha schema and fixtures
+Read `.agents/skills/project-schema-review/SKILL.md` before migrations/index/retention changes. Review room/membership/session/contact/recording relationships, existing rows/backfills, uniqueness/FKs/delete actions, query cadence/indexes, historical analytics retention, lock/table-scan risk, rollback/recovery, and deploy ordering. Never execute destructive production data changes during development.
