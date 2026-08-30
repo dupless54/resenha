@@ -65,6 +65,17 @@ module Resenha
       QUALITY_PROFILES.key(max_quality_profile)
     end
 
+    # Room capacity is transport-aware. A room may opt into a lower explicit
+    # limit, while peer-to-peer calls are always capped by the site-wide mesh
+    # safety ceiling so an accidental large room cannot create an N² mesh.
+    # LiveKit keeps the room-level capacity because its SFU topology does not
+    # multiply each participant's upstream by the room size.
+    def participant_limit_for(transport)
+      limits = [max_participants]
+      limits << SiteSetting.resenha_mesh_max_participants if transport.to_s == "mesh"
+      limits.compact.min
+    end
+
     # Room-level capability only; per-user publish rights are guardian-driven
     # (stage listeners never publish even when this is true).
     def video_allowed?
