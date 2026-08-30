@@ -7,7 +7,7 @@
 # mock lifecycle still restores this override automatically after the example.
 RSpec.configure do |config|
   config.before(:each) do |example|
-    next unless example.full_description.include?("Resenha::RoomsController#signal rate limits")
+    next if example.full_description.exclude?("Resenha::RoomsController#signal rate limits")
 
     allow(SiteSetting).to receive(:resenha_max_room_participants).and_return(50)
   end
