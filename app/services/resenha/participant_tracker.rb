@@ -5,18 +5,30 @@ module Resenha
     KEY_NAMESPACE = "resenha:room".freeze
     RECENTLY_ACTIVE_ROOMS_KEY = "resenha:recently_active_rooms".freeze
     SAFETY_TTL = 30.minutes.to_i
+    PARTICIPANT_ADD_MUTEX_VALIDITY = 5.seconds
     # Must outlive one client heartbeat interval (10s) plus request latency,
     # so a beat already in flight when the user leaves can't resurrect them.
     LEFT_TOMBSTONE_TTL = 15
 
     class << self
       def add(room_id, user_id, migrated: false)
-        return if user_id.to_i <= 0
+        user_id = user_id.to_i
+        return if user_id <= 0
 
-        redis.zadd(key(room_id), Time.now.to_f, user_id)
-        redis.expire(key(room_id), SAFETY_TTL)
-        redis.expire(metadata_key(room_id), SAFETY_TTL)
-        touch_recently_active(room_id)
+        # Joining and heartbeat refreshes share this path. Serialize the small
+        # critical section so two simultaneous joins cannot both claim the last
+        # slot after observing the same participant count.
+        DistributedMutex.synchronize(
+          "resenha_room_#{room_id}_participant_add",
+          validity: PARTICIPANT_ADD_MUTEX_VALIDITY,
+        ) do
+          ensure_capacity!(room_id, user_id)
+
+          redis.zadd(key(room_id), Time.now.to_f, user_id)
+          redis.expire(key(room_id), SAFETY_TTL)
+          redis.expire(metadata_key(room_id), SAFETY_TTL)
+          touch_recently_active(room_id)
+        end
       rescue Redis::CommandError => e
         raise if e.message.exclude?("WRONGTYPE") || migrated
         redis.del(key(room_id))
@@ -240,6 +252,22 @@ module Resenha
       end
 
       private
+
+      def ensure_capacity!(room_id, user_id)
+        transport = pinned_transport(room_id)
+        return if transport.blank?
+
+        room = Resenha::Room.find_by(id: room_id)
+        return unless room
+
+        limit = room.participant_limit_for(transport)
+        return unless limit
+
+        participants = user_ids(room_id)
+        return if participants.include?(user_id) || participants.length < limit
+
+        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.room_full"))
+      end
 
       def redis
         @redis ||= Discourse.redis
