@@ -54,6 +54,10 @@ function selectedRoundTripTimeMs(reports) {
           report.type === "candidate-pair" &&
           report.state === "succeeded" &&
           (report.nominated === true || report.selected === true)
+      ) ??
+      reports.find(
+        (report) =>
+          report.type === "candidate-pair" && report.state === "succeeded"
       );
 
   const candidateRtt = finiteNumber(selectedPair?.currentRoundTripTime);
@@ -195,6 +199,7 @@ export class MeshConnectionQualityRegistry {
   #peers = new Map();
   #qualities = new Map();
   #timers = new Map();
+  #sampleTokens = new Map();
   #previousInbound = new WeakMap();
   #listeners = new Set();
 
@@ -217,6 +222,7 @@ export class MeshConnectionQualityRegistry {
       return;
     }
 
+    this.#invalidateSamples(id);
     let peers = this.#peers.get(id);
     if (!peers) {
       peers = new Map();
@@ -243,6 +249,7 @@ export class MeshConnectionQualityRegistry {
       return;
     }
 
+    this.#invalidateSamples(id);
     peers.delete(userId);
     if (peers.size) {
       void this.sample(id);
@@ -266,6 +273,7 @@ export class MeshConnectionQualityRegistry {
       return null;
     }
 
+    const sampleToken = this.#nextSampleToken(id);
     const qualities = [];
     for (const pc of peers.values()) {
       let previousInbound = this.#previousInbound.get(pc);
@@ -283,6 +291,10 @@ export class MeshConnectionQualityRegistry {
       }
     }
 
+    if (this.#sampleTokens.get(id) !== sampleToken) {
+      return this.qualityFor(id);
+    }
+
     const quality = aggregateConnectionQuality(qualities);
     this.#setQuality(id, quality);
     return quality;
@@ -295,8 +307,19 @@ export class MeshConnectionQualityRegistry {
     this.#timers.clear();
     this.#peers.clear();
     this.#qualities.clear();
+    this.#sampleTokens.clear();
     this.#previousInbound = new WeakMap();
     this.#listeners.clear();
+  }
+
+  #invalidateSamples(roomId) {
+    this.#nextSampleToken(roomId);
+  }
+
+  #nextSampleToken(roomId) {
+    const token = (this.#sampleTokens.get(roomId) ?? 0) + 1;
+    this.#sampleTokens.set(roomId, token);
+    return token;
   }
 
   #setQuality(roomId, quality) {
