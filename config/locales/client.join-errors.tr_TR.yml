@@ -1,0 +1,5 @@
+tr_TR:
+  js:
+    resenha:
+      room:
+        join_failed: "Sesli odaya katılamadık. Bağlantınızı kontrol edip tekrar deneyin."
