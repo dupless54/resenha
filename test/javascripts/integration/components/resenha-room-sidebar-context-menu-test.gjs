@@ -75,20 +75,27 @@ module(
         locked: false,
       });
 
-      assert.dom(".resenha-room-sidebar-context-menu__toggle-lock").doesNotExist();
+      assert
+        .dom(".resenha-room-sidebar-context-menu__toggle-lock")
+        .doesNotExist();
     });
 
-    test("does not expose the lock action for an ephemeral call room", async function (assert) {
-      await renderMenu(this, {
-        id: 1,
-        slug: "call",
-        can_manage: true,
-        can_invite: false,
-        ephemeral: true,
-        locked: false,
-      });
+    test(
+      "does not expose the lock action for an ephemeral call room",
+      async function (assert) {
+        await renderMenu(this, {
+          id: 1,
+          slug: "call",
+          can_manage: true,
+          can_invite: false,
+          ephemeral: true,
+          locked: false,
+        });
 
-      assert.dom(".resenha-room-sidebar-context-menu__toggle-lock").doesNotExist();
-    });
+        assert
+          .dom(".resenha-room-sidebar-context-menu__toggle-lock")
+          .doesNotExist();
+      }
+    );
   }
 );
