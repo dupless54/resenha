@@ -12,6 +12,7 @@ import { RING_SECONDS } from "../../lib/resenha/call-constants";
 import HeartbeatManager from "../../lib/resenha/heartbeat-manager";
 import IdleTracker, { idleThresholds } from "../../lib/resenha/idle-tracker";
 import { consumePendingInviteRef } from "../../lib/resenha/invite-ref";
+import { joinErrorMessage } from "../../lib/resenha/join-error";
 import LivekitCoordinator from "../../lib/resenha/livekit-coordinator";
 import LocalAudioPipeline from "../../lib/resenha/local-audio-pipeline";
 import LocalVideoManager from "../../lib/resenha/local-video-manager";
@@ -734,6 +735,10 @@ export default class ResenhaWebrtcService extends Service {
       // eslint-disable-next-line no-console
       console.warn("[resenha] failed to join room", error);
       this.#handleJoinFailure(room.id);
+      this.toasts.error({
+        duration: 8000,
+        data: { message: joinErrorMessage(error) },
+      });
       return;
     }
 
