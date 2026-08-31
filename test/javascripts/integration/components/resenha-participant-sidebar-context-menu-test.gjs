@@ -99,7 +99,7 @@ module(
         .hasAttribute("aria-pressed", "true", "exposes the active state");
     });
 
-    test("offers quick ban to room managers for ordinary participants", async function (assert) {
+    test("offers destructive quick ban confirmation to room managers", async function (assert) {
       this.menuData.canManageRoom = true;
 
       await render(
@@ -117,9 +117,22 @@ module(
       assert
         .dom(".resenha-participant-sidebar-context-menu__kick-btn")
         .exists("keeps the separate kick action available");
+
+      await click(".resenha-participant-sidebar-context-menu__ban-btn");
+
+      assert.strictEqual(
+        this.dialog.lastConfirmation?.confirmButtonClass,
+        "btn-danger",
+        "marks ban confirmation as destructive"
+      );
+      assert.strictEqual(
+        typeof this.dialog.lastConfirmation?.didConfirm,
+        "function",
+        "defers the ban until explicit confirmation"
+      );
     });
 
-    test("requires confirmation before kicking a participant", async function (assert) {
+    test("requires destructive confirmation before kicking a participant", async function (assert) {
       this.menuData.canManageRoom = true;
 
       await render(
@@ -138,6 +151,11 @@ module(
         this.dialog.lastConfirmation?.message,
         "Kick @bob from this room? They can rejoin unless you ban them.",
         "explains that kick is temporary"
+      );
+      assert.strictEqual(
+        this.dialog.lastConfirmation?.confirmButtonClass,
+        "btn-danger",
+        "marks kick confirmation as destructive"
       );
       assert.strictEqual(
         typeof this.dialog.lastConfirmation?.didConfirm,
