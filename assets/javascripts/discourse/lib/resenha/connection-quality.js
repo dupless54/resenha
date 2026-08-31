@@ -2,6 +2,7 @@ export const CONNECTION_QUALITY_UNKNOWN = "unknown";
 export const CONNECTION_QUALITY_GOOD = "good";
 export const CONNECTION_QUALITY_FAIR = "fair";
 export const CONNECTION_QUALITY_POOR = "poor";
+export const CONNECTION_STATUS_RECONNECTING = "reconnecting";
 
 const DEFAULT_INTERVAL_MS = 5000;
 
@@ -195,6 +196,7 @@ export class MeshConnectionQualityRegistry {
   #intervalMs;
   #peers = new Map();
   #qualities = new Map();
+  #reconnectingPeers = new Map();
   #timers = new Map();
   #sampleTokens = new Map();
   #previousInbound = new WeakMap();
@@ -211,6 +213,47 @@ export class MeshConnectionQualityRegistry {
 
   qualityFor(roomId) {
     return this.#qualities.get(Number(roomId)) ?? null;
+  }
+
+  stateFor(roomId) {
+    const id = Number(roomId);
+    if (this.#reconnectingPeers.get(id)?.size) {
+      return CONNECTION_STATUS_RECONNECTING;
+    }
+    return this.qualityFor(id);
+  }
+
+  markReconnecting(roomId, remoteUserId) {
+    const id = Number(roomId);
+    const userId = Number(remoteUserId);
+    if (!id || !userId) {
+      return;
+    }
+
+    let peers = this.#reconnectingPeers.get(id);
+    if (!peers) {
+      peers = new Set();
+      this.#reconnectingPeers.set(id, peers);
+    }
+    if (peers.has(userId)) {
+      return;
+    }
+
+    peers.add(userId);
+    this.#notify(id);
+  }
+
+  clearReconnecting(roomId, remoteUserId) {
+    const id = Number(roomId);
+    const peers = this.#reconnectingPeers.get(id);
+    if (!peers?.delete(Number(remoteUserId))) {
+      return;
+    }
+
+    if (!peers.size) {
+      this.#reconnectingPeers.delete(id);
+    }
+    this.#notify(id);
   }
 
   registerPeer(roomId, remoteUserId, peerConnection) {
@@ -302,6 +345,7 @@ export class MeshConnectionQualityRegistry {
     this.#timers.clear();
     this.#peers.clear();
     this.#qualities.clear();
+    this.#reconnectingPeers.clear();
     this.#sampleTokens.clear();
     this.#previousInbound = new WeakMap();
   }
@@ -328,8 +372,13 @@ export class MeshConnectionQualityRegistry {
       this.#qualities.set(roomId, quality);
     }
 
+    this.#notify(roomId);
+  }
+
+  #notify(roomId) {
+    const state = this.stateFor(roomId);
     for (const listener of this.#listeners) {
-      listener(roomId, quality);
+      listener(roomId, state);
     }
   }
 }

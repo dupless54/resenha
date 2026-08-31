@@ -776,12 +776,15 @@ export default class PeerManager {
     const attempts = this.#restartAttempts.get(key) || 0;
 
     if (attempts >= PeerManager.#maxRestartAttempts) {
+      meshConnectionQuality.clearReconnecting(roomId, remoteUserId);
       // eslint-disable-next-line no-console
       console.warn(
         `[resenha] max restart attempts (${PeerManager.#maxRestartAttempts}) reached for user ${remoteUserId}`
       );
       return;
     }
+
+    meshConnectionQuality.markReconnecting(roomId, remoteUserId);
 
     const baseDelay = options.immediate
       ? timing.restartImmediateDelayMs
@@ -811,6 +814,7 @@ export default class PeerManager {
   #clearPeerRestart(roomId, remoteUserId) {
     this.#clearPeerRestartTimer(roomId, remoteUserId);
     this.#restartAttempts.delete(PeerManager.peerKey(roomId, remoteUserId));
+    meshConnectionQuality.clearReconnecting(roomId, remoteUserId);
   }
 
   #clearPeerRestartTimer(roomId, remoteUserId) {

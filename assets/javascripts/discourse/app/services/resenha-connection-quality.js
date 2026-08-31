@@ -21,4 +21,9 @@ export default class ResenhaConnectionQualityService extends Service {
     this.revision;
     return meshConnectionQuality.qualityFor(roomId);
   }
+
+  stateFor(roomId) {
+    this.revision;
+    return meshConnectionQuality.stateFor(roomId);
+  }
 }

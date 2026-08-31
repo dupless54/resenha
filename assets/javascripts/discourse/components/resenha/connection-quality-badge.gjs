@@ -8,28 +8,26 @@ import { i18n } from "discourse-i18n";
 export default class ResenhaConnectionQualityBadge extends Component {
   @service("resenha-connection-quality") connectionQuality;
 
-  get quality() {
-    return this.connectionQuality.qualityFor(this.args.room?.id);
+  get state() {
+    return this.connectionQuality.stateFor(this.args.room?.id);
   }
 
   get label() {
-    return this.quality
-      ? i18n(`resenha.connection_quality.${this.quality}`)
-      : null;
+    return this.state ? i18n(`resenha.connection_quality.${this.state}`) : null;
   }
 
   get title() {
-    return this.quality
-      ? i18n(`resenha.connection_quality.title_${this.quality}`)
+    return this.state
+      ? i18n(`resenha.connection_quality.title_${this.state}`)
       : null;
   }
 
   <template>
-    {{#if this.quality}}
+    {{#if this.state}}
       <span
         class={{dConcatClass
           "resenha-connection-quality"
-          (concat "--" this.quality)
+          (concat "--" this.state)
         }}
         title={{this.title}}
         aria-label={{this.title}}
