@@ -77,9 +77,18 @@ module("Resenha | Unit | Service | resenha-rooms", function (hooks) {
         },
       });
 
-      assert.true(service.roomById(2).locked, "applies the shared room update");
-      assert.true(service.roomById(2).can_manage, "keeps manager permission");
-      assert.true(service.roomById(2).can_invite, "keeps invite permission");
+      assert.true(
+        service.roomById(2).locked,
+        "applies the shared room update"
+      );
+      assert.true(
+        service.roomById(2).can_manage,
+        "keeps manager permission"
+      );
+      assert.true(
+        service.roomById(2).can_invite,
+        "keeps invite permission"
+      );
       assert.true(
         service.roomById(2).chat_available,
         "keeps user-gated chat state"
