@@ -261,13 +261,22 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
   }
 
   @action
-  async kick() {
+  kick() {
+    this.args.close();
+    this.dialog.yesNoConfirm({
+      message: i18n("resenha.participant.confirm_kick", {
+        username: this.participant.username,
+      }),
+      didConfirm: () => this.#kick(),
+    });
+  }
+
+  async #kick() {
     try {
       await ajax(`/resenha/rooms/${this.room.id}/kick`, {
         type: "DELETE",
         data: { user_id: this.participant.id },
       });
-      this.args.close();
     } catch (error) {
       popupAjaxError(error);
     }
