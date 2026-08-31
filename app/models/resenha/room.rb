@@ -18,6 +18,7 @@ module Resenha
     has_many :room_memberships, class_name: "Resenha::RoomMembership", dependent: :destroy
     has_many :members, through: :room_memberships, source: :user
     has_many :recordings, class_name: "Resenha::Recording", dependent: :delete_all
+    has_many :room_bans, class_name: "Resenha::RoomBan", dependent: :delete_all
 
     validates :name, presence: true, length: { maximum: 80 }
     validates :slug, presence: true, uniqueness: true
