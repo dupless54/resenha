@@ -22,10 +22,10 @@ function responsePayload(error) {
 function hasServerReason(payload) {
   return Boolean(
     (Array.isArray(payload?.errors) && payload.errors.length > 0) ||
-      payload?.error ||
-      payload?.message ||
-      payload?.failed ||
-      payload?.error_key
+    payload?.error ||
+    payload?.message ||
+    payload?.failed ||
+    payload?.error_key
   );
 }
 
