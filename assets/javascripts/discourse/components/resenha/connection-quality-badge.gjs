@@ -1,4 +1,5 @@
 import Component from "@glimmer/component";
+import { concat } from "@ember/helper";
 import { service } from "@ember/service";
 import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
