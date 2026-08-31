@@ -11,7 +11,9 @@ class FakeRTCPeerConnection {
   #senders = [];
   #transceivers = [];
 
-  constructor() {}
+  constructor(configuration) {
+    this.configuration = configuration;
+  }
 
   addTrack(track) {
     const sender = { track };
@@ -58,6 +60,19 @@ class FakeRTCPeerConnection {
   }
 }
 
+function managerOptions(overrides = {}) {
+  return {
+    getIceServers: () => [],
+    getLocalStream: () => null,
+    sendSignal: () => Promise.resolve(),
+    flushQueuedSignals: () => Promise.resolve(),
+    onTrack: () => {},
+    clearSignalQueue: () => {},
+    onPeerDestroyed: () => {},
+    ...overrides,
+  };
+}
+
 module("Resenha | Unit | Lib | peer-manager", function (hooks) {
   hooks.beforeEach(function () {
     this.originalRTCPeerConnection = globalThis.RTCPeerConnection;
@@ -74,32 +89,159 @@ module("Resenha | Unit | Lib | peer-manager", function (hooks) {
     let shouldRestart = true;
     let sentSignals = 0;
 
-    const manager = new PeerManager({
-      getIceServers: () => [],
-      getLocalStream: () => null,
-      sendSignal: () => {
-        sentSignals++;
-        return Promise.resolve();
-      },
-      flushQueuedSignals: () => Promise.resolve(),
-      onTrack: () => {},
-      clearSignalQueue: () => {},
-      onPeerDestroyed: () => {},
-      shouldRestartPeer: () => shouldRestart,
-    });
+    const manager = new PeerManager(
+      managerOptions({
+        sendSignal: () => {
+          sentSignals++;
+          return Promise.resolve();
+        },
+        shouldRestartPeer: () => shouldRestart,
+        requestIceRefresh: async () => {
+          shouldRestart = false;
+          return { ice: { servers: [], transport_policy: "all" } };
+        },
+      })
+    );
 
     await manager.create(1, 2);
     assert.true(manager.has(1, 2), "creates the initial peer");
 
-    const restart = manager.restart(1, 2);
-    shouldRestart = false;
-    await restart;
+    await manager.restart(1, 2);
 
-    assert.false(
+    assert.true(
       manager.has(1, 2),
-      "does not keep a recreated peer when restart is no longer allowed"
+      "keeps the existing peer when restart becomes ineligible before teardown"
     );
     assert.strictEqual(sentSignals, 0, "does not emit a new offer");
+    manager.destroyAll();
+  });
+
+  test("refreshes ICE before recreating a peer", async function (assert) {
+    const originalServers = [{ urls: "stun:old.example.test" }];
+    const freshServers = [
+      {
+        urls: "turn:relay.example.test",
+        username: "fresh",
+        credential: "secret",
+      },
+    ];
+    let refreshes = 0;
+
+    const manager = new PeerManager(
+      managerOptions({
+        getIceServers: () => originalServers,
+        getIceTransportPolicy: () => "all",
+        requestIceRefresh: async () => {
+          refreshes++;
+          return {
+            ice: { servers: freshServers, transport_policy: "relay" },
+          };
+        },
+      })
+    );
+
+    const initial = await manager.create(1, 2);
+    assert.deepEqual(initial.configuration.iceServers, originalServers);
+
+    await manager.restart(1, 2);
+    const restarted = manager.get(1, 2);
+
+    assert.strictEqual(refreshes, 1, "refreshes exactly once for the restart");
+    assert.notStrictEqual(restarted, initial, "rebuilds the peer");
+    assert.deepEqual(
+      restarted.configuration.iceServers,
+      freshServers,
+      "uses the refreshed TURN credentials"
+    );
+    assert.strictEqual(
+      restarted.configuration.iceTransportPolicy,
+      "relay",
+      "uses the refreshed transport policy"
+    );
+    manager.destroyAll();
+  });
+
+  test("does not recreate a peer after a terminal ICE refresh rejection", async function (assert) {
+    let refreshes = 0;
+    const manager = new PeerManager(
+      managerOptions({
+        requestIceRefresh: async () => {
+          refreshes++;
+          const error = new Error("room instance ended");
+          error.status = 410;
+          throw error;
+        },
+      })
+    );
+
+    const initial = await manager.create(1, 2);
+    await manager.restart(1, 2);
+
+    assert.strictEqual(refreshes, 1);
+    assert.strictEqual(
+      manager.get(1, 2),
+      initial,
+      "leaves the stale peer in place for the heartbeat teardown path"
+    );
+    manager.destroyAll();
+  });
+
+  test("falls back to cached ICE when refresh fails transiently", async function (assert) {
+    const originalServers = [{ urls: "stun:cached.example.test" }];
+    const manager = new PeerManager(
+      managerOptions({
+        getIceServers: () => originalServers,
+        requestIceRefresh: async () => {
+          const error = new Error("temporary outage");
+          error.status = 503;
+          throw error;
+        },
+      })
+    );
+
+    const initial = await manager.create(1, 2);
+    await manager.restart(1, 2);
+    const restarted = manager.get(1, 2);
+
+    assert.notStrictEqual(restarted, initial, "still performs the reconnect");
+    assert.deepEqual(
+      restarted.configuration.iceServers,
+      originalServers,
+      "uses the last known ICE configuration"
+    );
+    manager.destroyAll();
+  });
+
+  test("deduplicates concurrent room ICE refreshes", async function (assert) {
+    let resolveRefresh;
+    let refreshes = 0;
+    const refreshPromise = new Promise((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const manager = new PeerManager(
+      managerOptions({
+        requestIceRefresh: () => {
+          refreshes++;
+          return refreshPromise;
+        },
+      })
+    );
+
+    await manager.create(1, 2);
+    await manager.create(1, 3);
+
+    const firstRestart = manager.restart(1, 2);
+    const secondRestart = manager.restart(1, 3);
+    await Promise.resolve();
+
+    assert.strictEqual(refreshes, 1, "shares one refresh across room peers");
+
+    resolveRefresh({ ice: { servers: [], transport_policy: "all" } });
+    await Promise.all([firstRestart, secondRestart]);
+
+    assert.true(manager.has(1, 2));
+    assert.true(manager.has(1, 3));
+    manager.destroyAll();
   });
 
   test("alignVideoTransceiverForAnswer makes the negotiated transceiver sendable and migrates the orphaned track", async function (assert) {
@@ -157,16 +299,9 @@ module("Resenha | Unit | Lib | peer-manager", function (hooks) {
   test("alignScreenAudioTransceiverForAnswer adopts the negotiated m-line and migrates the orphaned track", async function (assert) {
     const screenAudioTrack = { id: "screen-audio", kind: "audio" };
 
-    const manager = new PeerManager({
-      getIceServers: () => [],
-      getLocalStream: () => null,
-      getLocalScreenAudioTrack: () => screenAudioTrack,
-      sendSignal: () => Promise.resolve(),
-      flushQueuedSignals: () => Promise.resolve(),
-      onTrack: () => {},
-      clearSignalQueue: () => {},
-      onPeerDestroyed: () => {},
-    });
+    const manager = new PeerManager(
+      managerOptions({ getLocalScreenAudioTrack: () => screenAudioTrack })
+    );
 
     const pc = await manager.create(1, 2);
     await Promise.resolve();
@@ -228,18 +363,11 @@ module("Resenha | Unit | Lib | peer-manager", function (hooks) {
       negotiated,
       "screenAudioTransceiverFor returns the negotiated transceiver"
     );
+    manager.destroyAll();
   });
 
   test("alignScreenAudioTransceiverForAnswer leaves single-audio offers from older clients alone", async function (assert) {
-    const manager = new PeerManager({
-      getIceServers: () => [],
-      getLocalStream: () => null,
-      sendSignal: () => Promise.resolve(),
-      flushQueuedSignals: () => Promise.resolve(),
-      onTrack: () => {},
-      clearSignalQueue: () => {},
-      onPeerDestroyed: () => {},
-    });
+    const manager = new PeerManager(managerOptions());
 
     const pc = await manager.create(1, 2);
     const preAllocated = PeerManager.screenAudioTransceiverFor(pc);
@@ -264,5 +392,6 @@ module("Resenha | Unit | Lib | peer-manager", function (hooks) {
       preAllocated,
       "keeps the pre-allocated transceiver as the screen audio slot"
     );
+    manager.destroyAll();
   });
 });
