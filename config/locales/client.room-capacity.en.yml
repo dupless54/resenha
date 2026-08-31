@@ -1,0 +1,7 @@
+en:
+  js:
+    resenha:
+      room:
+        full: "Room full"
+        capacity: "Voice room capacity: %{count} of %{max}"
+        capacity_full: "Room full — %{count} of %{max}"
