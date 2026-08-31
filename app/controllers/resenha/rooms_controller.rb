@@ -50,8 +50,6 @@ module Resenha
           .order(:created_at)
           .select { |room| guardian.can_see_resenha_room?(room) }
 
-      # Captured before serializing so clients subscribing from this position
-      # never miss a directory event published while the response was built.
       index_message_bus_last_id = MessageBus.last_id(Resenha.room_index_channel)
 
       render json: {
@@ -69,8 +67,6 @@ module Resenha
     def create
       guardian.ensure_can_create_resenha_room!
 
-      # Ephemeral rooms are created by features on the user's behalf (with
-      # their own TTL-based cap), not by the user — they don't count here.
       if current_user.resenha_rooms.persistent.count >= SiteSetting.resenha_max_rooms_per_user
         raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.room_limit"))
       end
@@ -103,8 +99,6 @@ module Resenha
 
     def destroy
       guardian.ensure_can_manage_resenha_room!(@room)
-      # Built before the destroy so the broadcast still targets the members
-      # whose memberships the destroy cascades away.
       broadcaster = Resenha::DirectoryBroadcaster.new(@room, :destroyed)
       @room.destroy!
       broadcaster.broadcast
@@ -117,10 +111,6 @@ module Resenha
       guardian.ensure_can_join_resenha_room!(@room)
       RateLimiter.new(current_user, "resenha-joins", 30, 1.minute).performed!
 
-      # A repeated join carrying the live participant session (a UI retry, a
-      # duplicated request) refreshes the existing grant instead of re-running
-      # join side effects: no session rotation, no second analytics session,
-      # no badge/invite re-fires, no roster rebroadcast.
       if repeat_join?
         transport = Resenha::ParticipantTracker.pinned_transport(@room.id) || "mesh"
 
@@ -152,8 +142,6 @@ module Resenha
         return render json: payload
       end
 
-      # Resolved before presence is added, so a LiveKit failure rejects the
-      # join without leaving the user in the roster.
       transport = Resenha::ParticipantTracker.pinned_transport(@room.id)
       transport ||= Resenha::Livekit.available_for?(@room) ? "livekit" : "mesh"
 
@@ -162,9 +150,6 @@ module Resenha
         livekit = mint_livekit_payload
 
         if livekit.nil?
-          # Fall back to mesh only when explicitly enabled and the room is
-          # empty — an occupied LiveKit room must never be split, and silent
-          # degradation hides outages from ops.
           if SiteSetting.resenha_livekit_mesh_fallback &&
                Resenha::ParticipantTracker.user_ids(@room.id).empty?
             Resenha::ParticipantTracker.clear_transport_pin(@room.id)
@@ -177,9 +162,6 @@ module Resenha
 
       transport = Resenha::ParticipantTracker.pin_transport!(@room.id, transport)
 
-      # A concurrent first join can win the pin race with a different
-      # transport (e.g. settings changed between the two resolutions) —
-      # the pin is authoritative.
       if transport == "livekit" && livekit.nil?
         livekit = mint_livekit_payload
         if livekit.nil?
@@ -200,13 +182,6 @@ module Resenha
         return render_json_error(I18n.t("resenha.errors.room_full"), status: 422)
       end
 
-      # A joiner already in the roster but without the live session proof (a
-      # reloaded tab, a second device — or a client replaying this endpoint)
-      # takes over the existing grant rather than re-running first-join side
-      # effects: the session still rotates so the new tab gains signaling
-      # authority, but the open analytics row is reused and badge/invite
-      # hooks don't re-fire. Otherwise every replayed join is a free
-      # analytics insert and roster broadcast.
       takeover = admission == :existing
       previous_metadata =
         takeover ? Resenha::ParticipantTracker.get_metadata(@room.id, current_user.id) : {}
@@ -256,10 +231,6 @@ module Resenha
         end
       end
 
-      # A join settles this room's pending invitation/call notifications: the
-      # incoming-call modal, push notifications, and cached-room transitions
-      # never pass through the user-menu click marking, so without this the
-      # notification stays unread forever.
       mark_invitation_notifications_read!
 
       if params[:skip_status].blank?
@@ -282,11 +253,6 @@ module Resenha
       render json: payload
     end
 
-    # Reissues a LiveKit access token for the reconnect ladder, which runs
-    # precisely when the presence TTL may have lapsed — so this endpoint
-    # re-adds presence itself (same authz as heartbeat) instead of requiring
-    # it. 410 tells the client the room instance ended: stop the ladder,
-    # tear down locally, and offer a rejoin.
     def livekit_token
       guardian.ensure_can_join_resenha_room!(@room)
       RateLimiter.new(current_user, "resenha-livekit-token", 10, 1.minute).performed!
@@ -295,12 +261,8 @@ module Resenha
         return render_json_error(I18n.t("resenha.errors.livekit_room_instance_ended"), status: 410)
       end
 
-      # The reconnect ladder only runs while the client considers itself in the
-      # call, so an explicit token request voids any leave/kick tombstone.
       Resenha::ParticipantTracker.clear_left(@room.id, current_user.id)
       Resenha::ParticipantTracker.add(@room.id, current_user.id)
-      # The session may have expired along with the lapsed presence — mint a
-      # fresh one so heartbeat/state keep working after the reconnect.
       participant_session_id =
         Resenha::ParticipantTracker.create_participant_session!(@room.id, current_user.id)
       metadata = Resenha::ParticipantTracker.get_metadata(@room.id, current_user.id)
@@ -335,9 +297,6 @@ module Resenha
     def leave
       guardian.ensure_can_join_resenha_room!(@room)
 
-      # A leave from a stale tab — carrying a participant session that a newer
-      # join has since superseded — must not tear down the presence and
-      # session the newer tab now owns.
       if params[:participant_session_id].present? &&
            !Resenha::ParticipantTracker.valid_participant_session?(
              @room.id,
@@ -363,8 +322,6 @@ module Resenha
     def heartbeat
       guardian.ensure_can_join_resenha_room!(@room)
 
-      # A beat already in flight when the user left (or was kicked) must not
-      # resurrect their presence; only join/livekit_token re-establish it.
       if Resenha::ParticipantTracker.recently_left?(@room.id, current_user.id)
         return head :no_content
       end
@@ -384,13 +341,7 @@ module Resenha
 
       Resenha::ParticipantTracker.update_metadata(@room.id, current_user.id, metadata)
       Resenha::ParticipantTracker.refresh_transport_pin(@room.id)
-
-      # Keep an in-progress chat session alive while someone is present, so it
-      # only rolls over to a new thread once the room is idle AND empty.
       Resenha::ChatSession.touch!(@room)
-
-      # Detect and broadcast any drift (idle change, or a participant whose TTL
-      # lapsed after an abrupt disconnect) now that metadata is persisted.
       Resenha::RoomBroadcaster.publish_participants_if_changed(@room)
 
       if !metadata[:skip_status] && Resenha::UserStatusManager.resenha_status_active?(current_user)
@@ -412,11 +363,11 @@ module Resenha
                  Resenha::ParticipantTracker
                    .list(@room.id)
                    .map do |user|
-                     BasicUserSerializer
-                       .new(user, scope: guardian, root: false)
-                       .as_json
-                       .merge(all_metadata[user.id] || {})
-                       .merge(staff: user.staff?)
+                     Resenha::ParticipantPayload.build(
+                       user,
+                       scope: guardian,
+                       metadata: all_metadata[user.id],
+                     )
                    end,
              }
     end
@@ -460,12 +411,9 @@ module Resenha
       metadata[:watching_video] = bool.cast(params[:watching]) if params.key?(:watching)
       metadata[:is_transcribing] = bool.cast(params[:transcribing]) if params.key?(:transcribing)
 
-      # A request that changes nothing must not become a full-roster
-      # rebroadcast to every participant.
       return head :no_content if metadata == previous_metadata
 
       Resenha::ParticipantTracker.update_metadata(@room.id, current_user.id, metadata)
-
       Resenha::RoomBroadcaster.publish_participants(@room)
 
       head :no_content
@@ -481,9 +429,6 @@ module Resenha
       target_user = User.find_by(id: permitted[:user_id].to_i)
       raise Discourse::InvalidParameters.new(:user_id) if target_user.blank?
 
-      # A room participant carries no implied context the way a post or chat
-      # message does, so the free-form notify_moderators flag is the only one
-      # that can be raised here.
       if permitted[:flag_type_id].to_i != ReviewableScore.types[:notify_moderators]
         raise Discourse::InvalidParameters.new(:flag_type_id)
       end
@@ -508,8 +453,6 @@ module Resenha
 
     def request_to_speak
       guardian.ensure_can_request_to_speak_in_resenha_room!(@room)
-      # The session (not the eventually-consistent roster) is what proves the
-      # user is actually in the call.
       ensure_participant_session!
 
       if Resenha::ParticipantTracker.raise_hand(@room.id, current_user.id)
@@ -535,8 +478,6 @@ module Resenha
         guardian.ensure_can_join_resenha_room!(@room)
         ensure_participant_session!
       else
-        # A moderator dismissing someone else's raised hand is a management
-        # action and must not require the moderator to be in the call.
         guardian.ensure_can_manage_resenha_room!(@room)
       end
 
@@ -551,9 +492,6 @@ module Resenha
 
     def signal
       guardian.ensure_can_join_resenha_room!(@room)
-      # Room eligibility alone is not enough: signaling authority comes from
-      # the server-attested session minted by join, so an eligible user who
-      # never joined can't reach anyone's media stack.
       ensure_participant_session!
 
       RateLimiter.new(
@@ -563,7 +501,6 @@ module Resenha
         10.seconds,
       ).performed!
 
-      # Defense in depth: LiveKit rooms never exchange WebRTC signals.
       if Resenha::ParticipantTracker.pinned_transport(@room.id) == "livekit"
         return render_json_error(I18n.t("resenha.errors.livekit_no_signaling"), status: 422)
       end
@@ -605,39 +542,23 @@ module Resenha
       head :no_content
     end
 
-    # Returns the room's current live chat session (linked channel and active
-    # thread) so the panel can render it. Does not create or change anything.
     def chat_session
       ensure_chat_available!
       render json: Resenha::ChatSession.state(@room)
     end
 
-    # Prepares the room's chat session for the caller: rolls a stale session
-    # over and follows them on the linked channel so chat's own message
-    # endpoints accept their posts. Never creates a thread — that only happens
-    # with the session's first message (see #chat_message); every later message
-    # goes through chat's regular API, not through Resenha.
     def ensure_chat_session
       ensure_chat_available!
       render json: Resenha::ChatSession.start!(@room, current_user)
     end
 
-    # Posts the session's opening message, creating the thread it roots. Only
-    # called by a panel that sees no live thread; once one exists, messages go
-    # through chat's own API instead.
     def chat_message
       ensure_chat_available!
 
       text = params.require(:message).to_s
-      # We post through Chat::CreateMessage directly, which bypasses the
-      # per-user flood limit + auto-silence that chat enforces in its own
-      # controller — apply it here so this endpoint isn't a way around it.
       ::Chat::MessageRateLimiter.run!(current_user)
       render json: Resenha::ChatSession.post_message!(@room, current_user, text)
     rescue Resenha::ChatSession::Error => e
-      # The chat plugin rejected the message for a reason worth showing (a
-      # duplicate, a too-long message, threading disabled, …) — surface it
-      # instead of the generic 403 that an access error would produce.
       render_json_error(e.message, status: 422)
     end
 
@@ -652,8 +573,6 @@ module Resenha
         return
       end
 
-      # Sustained probing with a missing or stale session is cut off before it
-      # can accumulate into free Redis/roster work.
       RateLimiter.new(current_user, "resenha-session-denied", 30, 1.minute).performed!
 
       raise Discourse::InvalidAccess.new(
@@ -685,8 +604,6 @@ module Resenha
       current_user.publish_notifications_state
     end
 
-    # Broad rescue is deliberate: a LiveKit problem must surface as the 503
-    # handled by the callers, never as an opaque 500.
     def mint_livekit_payload
       token = Resenha::Livekit.mint_token(user: current_user, room: @room, guardian: guardian)
       { url: SiteSetting.resenha_livekit_url, token: token }
