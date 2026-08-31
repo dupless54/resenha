@@ -1,0 +1,5 @@
+tr_TR:
+  js:
+    resenha:
+      participant:
+        confirm_kick: "@%{username} bu odadan çıkarılsın mı? Yasaklamadığınız sürece odaya yeniden katılabilir."
