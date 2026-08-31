@@ -13,9 +13,7 @@ export default class ResenhaConnectionQualityBadge extends Component {
   }
 
   get label() {
-    return this.state
-      ? i18n(`resenha.connection_quality.${this.state}`)
-      : null;
+    return this.state ? i18n(`resenha.connection_quality.${this.state}`) : null;
   }
 
   get title() {
