@@ -13,7 +13,7 @@ class ResenhaWebrtcStub extends Service {
 }
 
 module(
-  "Integration | Component | ResenhaRoomSidebarContextMenu | lock",
+  "Integration | Component | ResenhaRoomSidebarContextMenu | room management",
   function (hooks) {
     setupRenderingTest(hooks);
 
@@ -23,7 +23,7 @@ module(
       this.closeMenu = () => {};
     });
 
-    test("offers a lock action to a persistent-room manager", async function (assert) {
+    test("offers lock and ban management to a persistent-room manager", async function (assert) {
       this.menuData = {
         room: {
           id: 1,
@@ -47,6 +47,9 @@ module(
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
         .hasText("Lock room");
+      assert
+        .dom(".resenha-room-sidebar-context-menu__manage-bans")
+        .hasText("Manage bans");
     });
 
     test("offers an unlock action when the room is locked", async function (assert) {
@@ -73,9 +76,10 @@ module(
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
         .hasText("Unlock room");
+      assert.dom(".resenha-room-sidebar-context-menu__manage-bans").exists();
     });
 
-    test("does not expose the lock action to a non-manager", async function (assert) {
+    test("does not expose management actions to a non-manager", async function (assert) {
       this.menuData = {
         room: {
           id: 1,
@@ -99,9 +103,12 @@ module(
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
         .doesNotExist();
+      assert
+        .dom(".resenha-room-sidebar-context-menu__manage-bans")
+        .doesNotExist();
     });
 
-    test("does not expose the lock action for an ephemeral call room", async function (assert) {
+    test("does not expose persistent management actions for an ephemeral call room", async function (assert) {
       this.menuData = {
         room: {
           id: 1,
@@ -124,6 +131,9 @@ module(
 
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
+        .doesNotExist();
+      assert
+        .dom(".resenha-room-sidebar-context-menu__manage-bans")
         .doesNotExist();
     });
   }
