@@ -59,21 +59,24 @@ RSpec.describe Resenha::IceController do
     expect(response.status).to eq(403)
   end
 
-  it "returns conflict when the live room instance is pinned to LiveKit" do
+  it "returns conflict when a LiveKit room instance already owns the transport pin" do
     sign_in(user)
     create_participant_grant!(transport: "livekit")
 
     post "/resenha/rooms/#{room.id}/ice.json"
 
     expect(response.status).to eq(409)
+    expect(Resenha::ParticipantTracker.pinned_transport(room.id)).to eq("livekit")
   end
 
-  it "returns gone when the room instance no longer has a transport pin" do
+  it "restores an expired mesh transport pin while the participant grant is still live" do
     sign_in(user)
     Resenha::ParticipantTracker.create_participant_session!(room.id, user.id)
 
     post "/resenha/rooms/#{room.id}/ice.json"
 
-    expect(response.status).to eq(410)
+    expect(response.status).to eq(200)
+    expect(Resenha::ParticipantTracker.pinned_transport(room.id)).to eq("mesh")
+    expect(Resenha::ParticipantTracker.user_ids(room.id)).not_to include(user.id)
   end
 end
