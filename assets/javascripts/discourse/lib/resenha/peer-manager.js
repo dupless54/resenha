@@ -1,3 +1,4 @@
+import { ajax } from "discourse/lib/ajax";
 import { meshConnectionQuality } from "./connection-quality";
 
 // The screen-share audio m-line is pre-negotiated like the video one, but
@@ -163,6 +164,8 @@ export default class PeerManager {
   #restartAttempts = new Map();
   #connectionTimeouts = new Map();
   #pendingCandidates = new Map();
+  #roomIceConfigs = new Map();
+  #iceRefreshes = new Map();
 
   #getIceServers;
   #getIceTransportPolicy;
@@ -177,6 +180,7 @@ export default class PeerManager {
   #onPeerDestroyed;
   #onPeerConnected;
   #shouldRestartPeer;
+  #requestIceRefresh;
 
   constructor({
     getIceServers,
@@ -192,6 +196,8 @@ export default class PeerManager {
     onPeerDestroyed,
     onPeerConnected = () => {},
     shouldRestartPeer = () => true,
+    requestIceRefresh = (roomId) =>
+      ajax(`/resenha/rooms/${roomId}/ice`, { type: "POST" }),
   }) {
     this.#getIceServers = getIceServers;
     this.#getIceTransportPolicy = getIceTransportPolicy;
@@ -206,6 +212,7 @@ export default class PeerManager {
     this.#onPeerDestroyed = onPeerDestroyed;
     this.#onPeerConnected = onPeerConnected;
     this.#shouldRestartPeer = shouldRestartPeer;
+    this.#requestIceRefresh = requestIceRefresh;
   }
 
   has(roomId, userId) {
@@ -276,9 +283,11 @@ export default class PeerManager {
       return roomPeers.get(remoteUserId);
     }
 
+    const refreshedIce = this.#roomIceConfigs.get(roomId);
     const pc = new RTCPeerConnection({
-      iceServers: this.#getIceServers(),
-      iceTransportPolicy: this.#getIceTransportPolicy(),
+      iceServers: refreshedIce?.servers ?? this.#getIceServers(),
+      iceTransportPolicy:
+        refreshedIce?.transport_policy ?? this.#getIceTransportPolicy(),
     });
     roomPeers.set(remoteUserId, pc);
     meshConnectionQuality.registerPeer(roomId, remoteUserId, pc);
@@ -472,6 +481,8 @@ export default class PeerManager {
       });
       this.#peerConnections.delete(roomId);
     }
+    this.#roomIceConfigs.delete(roomId);
+    this.#iceRefreshes.delete(roomId);
   }
 
   async initiateOffer(roomId, remoteUserId) {
@@ -600,6 +611,12 @@ export default class PeerManager {
       return;
     }
 
+    const canRestart = await this.#refreshIceForRestart(roomId);
+    if (!canRestart || !this.#shouldRestartPeer(roomId, remoteUserId)) {
+      this.#clearPeerRestart(roomId, remoteUserId);
+      return;
+    }
+
     this.destroy(roomId, remoteUserId, { resetRestartAttempts: false });
 
     await this.create(roomId, remoteUserId);
@@ -634,9 +651,67 @@ export default class PeerManager {
     this.#connectionTimeouts.forEach((timer) => clearTimeout(timer));
     this.#connectionTimeouts.clear();
     this.#pendingCandidates.clear();
+    this.#roomIceConfigs.clear();
+    this.#iceRefreshes.clear();
   }
 
   // --- private ---
+
+  async #refreshIceForRestart(roomId) {
+    const existing = this.#iceRefreshes.get(roomId);
+    if (existing) {
+      return existing.promise;
+    }
+
+    const token = {};
+    const promise = this.#performIceRefresh(roomId, token);
+    this.#iceRefreshes.set(roomId, { token, promise });
+
+    try {
+      return await promise;
+    } finally {
+      if (this.#iceRefreshes.get(roomId)?.token === token) {
+        this.#iceRefreshes.delete(roomId);
+      }
+    }
+  }
+
+  async #performIceRefresh(roomId, token) {
+    let response;
+    try {
+      response = await this.#requestIceRefresh(roomId);
+    } catch (error) {
+      const status = error?.jqXHR?.status ?? error?.status;
+      if ([403, 404, 409, 410].includes(status)) {
+        // Authorization/session loss or an ended/non-mesh room instance is a
+        // terminal condition for this mesh reconnect. Heartbeat owns the
+        // user-facing call teardown, so do not try to recreate a stale peer.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[resenha] ICE refresh rejected for room ${roomId} (status ${status}); stopping peer restart`
+        );
+        return false;
+      }
+
+      // A temporary refresh outage must not make recovery worse than before
+      // this feature existed: rebuild once with the last known ICE config and
+      // let the bounded restart ladder try again if that connection also fails.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[resenha] ICE refresh failed for room ${roomId}; using cached configuration`
+      );
+      return true;
+    }
+
+    if (this.#destroyed || this.#iceRefreshes.get(roomId)?.token !== token) {
+      return false;
+    }
+
+    if (response?.ice) {
+      this.#roomIceConfigs.set(roomId, response.ice);
+    }
+    return true;
+  }
 
   #startConnectionTimeout(roomId, remoteUserId, pc) {
     const key = PeerManager.peerKey(roomId, remoteUserId);
