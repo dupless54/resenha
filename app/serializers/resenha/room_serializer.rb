@@ -88,11 +88,11 @@ module Resenha
 
     def active_participants
       tracked_participants.map do |user|
-        BasicUserSerializer
-          .new(user, scope: scope, root: false)
-          .as_json
-          .merge(participant_metadata[user.id] || {})
-          .merge(staff: user.staff?)
+        Resenha::ParticipantPayload.build(
+          user,
+          scope: scope,
+          metadata: participant_metadata[user.id],
+        )
       end
     end
 
