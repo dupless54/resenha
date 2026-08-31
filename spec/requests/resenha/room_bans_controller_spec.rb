@@ -60,9 +60,7 @@ RSpec.describe Resenha::RoomBansController do
     it "is idempotent for the same room and user" do
       sign_in(owner)
 
-      2.times do
-        post "/resenha/rooms/#{room.id}/bans.json", params: { user_id: user.id }
-      end
+      2.times { post "/resenha/rooms/#{room.id}/bans.json", params: { user_id: user.id } }
 
       expect(response.status).to eq(200)
       expect(room.room_bans.where(user_id: user.id).count).to eq(1)
