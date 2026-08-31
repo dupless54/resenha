@@ -2,7 +2,7 @@
 
 require "rails_helper"
 require_relative "../../../db/migrate/20241107000000_create_resenha_rooms"
-require_relative "../../../db/migrate/20260831114700_create_resenha_room_bans"
+require_relative "../../../db/migrate/20260831080000_create_resenha_room_bans"
 
 RSpec.describe Resenha::RoomBansController do
   fab!(:owner) { Fabricate(:user, trust_level: TrustLevel[2]) }
@@ -41,7 +41,9 @@ RSpec.describe Resenha::RoomBansController do
       expect(response.status).to eq(200)
       expect(response.parsed_body.dig("ban", "user", "id")).to eq(user.id)
       expect(room.room_bans.exists?(user_id: user.id)).to eq(true)
-      expect(Resenha::ParticipantTracker.user_ids(room.id)).not_to include(user.id)
+
+      participant_ids = Resenha::ParticipantTracker.user_ids(room.id)
+      expect(participant_ids).not_to include(user.id)
 
       sign_in(user)
       post "/resenha/rooms/#{room.id}/heartbeat.json",
@@ -58,7 +60,9 @@ RSpec.describe Resenha::RoomBansController do
     it "is idempotent for the same room and user" do
       sign_in(owner)
 
-      2.times { post "/resenha/rooms/#{room.id}/bans.json", params: { user_id: user.id } }
+      2.times do
+        post "/resenha/rooms/#{room.id}/bans.json", params: { user_id: user.id }
+      end
 
       expect(response.status).to eq(200)
       expect(room.room_bans.where(user_id: user.id).count).to eq(1)
@@ -66,7 +70,10 @@ RSpec.describe Resenha::RoomBansController do
 
     it "does not delete private-room membership" do
       room.update!(public: false)
-      room.room_memberships.create!(user: user, role: Resenha::RoomMembership::ROLE_PARTICIPANT)
+      room.room_memberships.create!(
+        user: user,
+        role: Resenha::RoomMembership::ROLE_PARTICIPANT,
+      )
       sign_in(owner)
 
       post "/resenha/rooms/#{room.id}/bans.json", params: { user_id: user.id }
@@ -120,10 +127,11 @@ RSpec.describe Resenha::RoomBansController do
 
       get "/resenha/rooms/#{room.id}/bans.json"
 
+      body = response.parsed_body
       expect(response.status).to eq(200)
-      expect(response.parsed_body.dig("bans", 0, "id")).to eq(ban.id)
-      expect(response.parsed_body.dig("bans", 0, "user", "username")).to eq(user.username)
-      expect(response.parsed_body.dig("bans", 0, "banned_by", "username")).to eq(owner.username)
+      expect(body.dig("bans", 0, "id")).to eq(ban.id)
+      expect(body.dig("bans", 0, "user", "username")).to eq(user.username)
+      expect(body.dig("bans", 0, "banned_by", "username")).to eq(owner.username)
 
       sign_in(other_user)
       get "/resenha/rooms/#{room.id}/bans.json"
@@ -134,7 +142,10 @@ RSpec.describe Resenha::RoomBansController do
   describe "DELETE /resenha/rooms/:room_id/bans/:id" do
     it "restores ordinary room admission without changing membership" do
       room.update!(public: false)
-      room.room_memberships.create!(user: user, role: Resenha::RoomMembership::ROLE_PARTICIPANT)
+      room.room_memberships.create!(
+        user: user,
+        role: Resenha::RoomMembership::ROLE_PARTICIPANT,
+      )
       ban = room.room_bans.create!(user: user, banned_by: owner)
       sign_in(owner)
 
