@@ -1,4 +1,5 @@
 import { module, test } from "qunit";
+import { meshConnectionQuality } from "discourse/plugins/resenha/discourse/lib/resenha/connection-quality";
 import PeerManager from "discourse/plugins/resenha/discourse/lib/resenha/peer-manager";
 
 class FakeRTCPeerConnection {
@@ -61,9 +62,11 @@ module("Resenha | Unit | Lib | peer-manager", function (hooks) {
   hooks.beforeEach(function () {
     this.originalRTCPeerConnection = globalThis.RTCPeerConnection;
     globalThis.RTCPeerConnection = FakeRTCPeerConnection;
+    meshConnectionQuality.resetForTesting();
   });
 
   hooks.afterEach(function () {
+    meshConnectionQuality.resetForTesting();
     globalThis.RTCPeerConnection = this.originalRTCPeerConnection;
   });
 
