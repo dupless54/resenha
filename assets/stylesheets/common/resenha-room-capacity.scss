@@ -63,7 +63,8 @@
     color: var(--success);
   }
 
-  &.--fair {
+  &.--fair,
+  &.--reconnecting {
     color: var(--tertiary);
   }
 
