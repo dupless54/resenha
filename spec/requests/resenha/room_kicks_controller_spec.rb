@@ -50,10 +50,7 @@ RSpec.describe Resenha::RoomKicksController do
 
   it "protects room moderators from being kicked" do
     moderator = Fabricate(:user, trust_level: TrustLevel[2])
-    room.room_memberships.create!(
-      user: moderator,
-      role: Resenha::RoomMembership::ROLE_MODERATOR,
-    )
+    room.room_memberships.create!(user: moderator, role: Resenha::RoomMembership::ROLE_MODERATOR)
     establish_presence!(moderator)
     sign_in(owner)
 
@@ -78,10 +75,7 @@ RSpec.describe Resenha::RoomKicksController do
 
   it "keeps self and room-creator kick protections" do
     manager = Fabricate(:user, trust_level: TrustLevel[2])
-    room.room_memberships.create!(
-      user: manager,
-      role: Resenha::RoomMembership::ROLE_MODERATOR,
-    )
+    room.room_memberships.create!(user: manager, role: Resenha::RoomMembership::ROLE_MODERATOR)
     sign_in(manager)
 
     delete "/resenha/rooms/#{room.id}/kick.json", params: { user_id: manager.id }
