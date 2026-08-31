@@ -7,6 +7,7 @@ import {
   CONNECTION_QUALITY_GOOD,
   CONNECTION_QUALITY_POOR,
   CONNECTION_QUALITY_UNKNOWN,
+  CONNECTION_STATUS_RECONNECTING,
   MeshConnectionQualityRegistry,
   samplePeerConnectionQuality,
 } from "discourse/plugins/resenha/discourse/lib/resenha/connection-quality";
@@ -203,6 +204,50 @@ module("Resenha | Unit | Lib | connection-quality", function () {
     registry.unregisterPeer(7, 2, goodPeer);
     assert.strictEqual(registry.qualityFor(7), null, "hides when alone");
 
+    registry.resetForTesting();
+  });
+
+  test("room reconnecting state overrides quality until every recovering peer clears", async function (assert) {
+    const registry = new MeshConnectionQualityRegistry({ intervalMs: 60_000 });
+    const peer = {
+      connectionState: "connected",
+      async getStats() {
+        return statsReport([
+          {
+            id: "audio-reconnect",
+            type: "inbound-rtp",
+            kind: "audio",
+            packetsReceived: 10,
+            packetsLost: 0,
+            jitter: 0.01,
+          },
+        ]);
+      },
+    };
+
+    registry.registerPeer(8, 2, peer);
+    await registry.sample(8);
+    assert.strictEqual(registry.stateFor(8), CONNECTION_QUALITY_GOOD);
+
+    registry.markReconnecting(8, 2);
+    registry.markReconnecting(8, 3);
+    assert.strictEqual(registry.stateFor(8), CONNECTION_STATUS_RECONNECTING);
+
+    registry.clearReconnecting(8, 2);
+    assert.strictEqual(
+      registry.stateFor(8),
+      CONNECTION_STATUS_RECONNECTING,
+      "one recovering peer keeps the room in reconnecting state"
+    );
+
+    registry.clearReconnecting(8, 3);
+    assert.strictEqual(
+      registry.stateFor(8),
+      CONNECTION_QUALITY_GOOD,
+      "falls back to measured quality after the final recovery clears"
+    );
+
+    registry.unregisterPeer(8, 2, peer);
     registry.resetForTesting();
   });
 
