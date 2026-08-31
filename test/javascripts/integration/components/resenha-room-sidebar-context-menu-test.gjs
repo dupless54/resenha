@@ -23,8 +23,18 @@ module(
       this.closeMenu = () => {};
     });
 
-    async function renderMenu(context, room) {
-      context.menuData = { room };
+    test("offers a lock action to a persistent-room manager", async function (assert) {
+      this.menuData = {
+        room: {
+          id: 1,
+          slug: "lounge",
+          can_manage: true,
+          can_invite: false,
+          ephemeral: false,
+          locked: false,
+        },
+      };
+
       await render(
         <template>
           <ResenhaRoomSidebarContextMenu
@@ -33,17 +43,6 @@ module(
           />
         </template>
       );
-    }
-
-    test("offers a lock action to a persistent-room manager", async function (assert) {
-      await renderMenu(this, {
-        id: 1,
-        slug: "lounge",
-        can_manage: true,
-        can_invite: false,
-        ephemeral: false,
-        locked: false,
-      });
 
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
@@ -51,14 +50,25 @@ module(
     });
 
     test("offers an unlock action when the room is locked", async function (assert) {
-      await renderMenu(this, {
-        id: 1,
-        slug: "lounge",
-        can_manage: true,
-        can_invite: false,
-        ephemeral: false,
-        locked: true,
-      });
+      this.menuData = {
+        room: {
+          id: 1,
+          slug: "lounge",
+          can_manage: true,
+          can_invite: false,
+          ephemeral: false,
+          locked: true,
+        },
+      };
+
+      await render(
+        <template>
+          <ResenhaRoomSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
 
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
@@ -66,14 +76,25 @@ module(
     });
 
     test("does not expose the lock action to a non-manager", async function (assert) {
-      await renderMenu(this, {
-        id: 1,
-        slug: "lounge",
-        can_manage: false,
-        can_invite: false,
-        ephemeral: false,
-        locked: false,
-      });
+      this.menuData = {
+        room: {
+          id: 1,
+          slug: "lounge",
+          can_manage: false,
+          can_invite: false,
+          ephemeral: false,
+          locked: false,
+        },
+      };
+
+      await render(
+        <template>
+          <ResenhaRoomSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
 
       assert
         .dom(".resenha-room-sidebar-context-menu__toggle-lock")
@@ -83,14 +104,25 @@ module(
     test(
       "does not expose the lock action for an ephemeral call room",
       async function (assert) {
-        await renderMenu(this, {
-          id: 1,
-          slug: "call",
-          can_manage: true,
-          can_invite: false,
-          ephemeral: true,
-          locked: false,
-        });
+        this.menuData = {
+          room: {
+            id: 1,
+            slug: "call",
+            can_manage: true,
+            can_invite: false,
+            ephemeral: true,
+            locked: false,
+          },
+        };
+
+        await render(
+          <template>
+            <ResenhaRoomSidebarContextMenu
+              @data={{this.menuData}}
+              @close={{this.closeMenu}}
+            />
+          </template>
+        );
 
         assert
           .dom(".resenha-room-sidebar-context-menu__toggle-lock")
