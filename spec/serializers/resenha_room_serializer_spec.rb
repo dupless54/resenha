@@ -3,6 +3,7 @@
 RSpec.describe Resenha::RoomSerializer do
   fab!(:viewer) { Fabricate(:user, trust_level: TrustLevel[2]) }
   fab!(:owner) { Fabricate(:user, trust_level: TrustLevel[2]) }
+  fab!(:staff, :admin)
   fab!(:room) { Fabricate(:resenha_room, creator: owner, public: true) }
   fab!(:participant_1) { Fabricate(:user) }
   fab!(:participant_2) { Fabricate(:user) }
@@ -43,5 +44,13 @@ RSpec.describe Resenha::RoomSerializer do
 
     expect(json[:effective_max_participants]).to eq(3)
     expect(json[:full]).to eq(true)
+  end
+
+  it "serializes staff authority with active participant snapshots" do
+    json = serialize([participant_1, staff])
+    participants = json[:active_participants].index_by { |participant| participant[:id] }
+
+    expect(participants[participant_1.id][:staff]).to eq(false)
+    expect(participants[staff.id][:staff]).to eq(true)
   end
 end
