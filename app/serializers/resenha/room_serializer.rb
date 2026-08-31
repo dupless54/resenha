@@ -92,6 +92,7 @@ module Resenha
           .new(user, scope: scope, root: false)
           .as_json
           .merge(participant_metadata[user.id] || {})
+          .merge(staff: user.staff?)
       end
     end
 

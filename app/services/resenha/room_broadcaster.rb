@@ -50,6 +50,7 @@ module Resenha
                 .new(user, scope: guardian, root: false)
                 .as_json
                 .merge(all_metadata[user.id] || {})
+                .merge(staff: user.staff?)
             end,
       }
 

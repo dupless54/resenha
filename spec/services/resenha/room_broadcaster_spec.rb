@@ -2,6 +2,7 @@
 
 RSpec.describe Resenha::RoomBroadcaster do
   fab!(:participant, :user)
+  fab!(:staff, :admin)
   fab!(:room) { Fabricate(:resenha_room, public: true) }
 
   before { SiteSetting.resenha_enabled = true }
@@ -22,6 +23,22 @@ RSpec.describe Resenha::RoomBroadcaster do
       expect(messages.size).to eq(1)
       expect(messages.first.user_ids).to be_nil
       expect(messages.first.group_ids).to be_nil
+    end
+
+    it "includes staff authority in participant broadcasts" do
+      SiteSetting.granular_anonymous_and_logged_in_groups_permissions = false
+      SiteSetting.resenha_allowed_groups = Group::AUTO_GROUPS[:everyone].to_s
+      Resenha::ParticipantTracker.add(room.id, participant.id)
+      Resenha::ParticipantTracker.add(room.id, staff.id)
+
+      messages =
+        MessageBus.track_publish(Resenha.room_channel(room.id)) do
+          described_class.publish_participants(room)
+        end
+      participants = messages.first.data[:participants].index_by { |entry| entry[:id] }
+
+      expect(participants[participant.id][:staff]).to eq(false)
+      expect(participants[staff.id][:staff]).to eq(true)
     end
 
     it "targets logged-in subscribers, never anonymous ones, when allowed groups are logged_in_users" do

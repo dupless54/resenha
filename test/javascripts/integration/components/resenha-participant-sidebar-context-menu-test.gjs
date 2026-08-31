@@ -45,7 +45,12 @@ module(
           ephemeral: false,
           creator_id: 99,
         },
-        participant: { id: 2, username: "bob", role: "participant" },
+        participant: {
+          id: 2,
+          username: "bob",
+          role: "participant",
+          staff: false,
+        },
         isCurrentUser: false,
         canManageRoom: false,
         onSpotlight: (participantId) => {
@@ -185,7 +190,7 @@ module(
         .exists("still allows a temporary kick");
     });
 
-    test("hides destructive moderation for protected room targets", async function (assert) {
+    test("hides destructive moderation for room moderators", async function (assert) {
       this.menuData.canManageRoom = true;
       this.menuData.participant.role = "moderator";
 
@@ -204,6 +209,27 @@ module(
       assert
         .dom(".resenha-participant-sidebar-context-menu__kick-btn")
         .doesNotExist("does not offer kick for a room moderator");
+    });
+
+    test("hides destructive moderation for site staff", async function (assert) {
+      this.menuData.canManageRoom = true;
+      this.menuData.participant.staff = true;
+
+      await render(
+        <template>
+          <ResenhaParticipantSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
+
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__ban-btn")
+        .doesNotExist("does not offer ban for site staff");
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__kick-btn")
+        .doesNotExist("does not offer kick for site staff");
     });
   }
 );
