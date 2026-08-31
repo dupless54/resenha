@@ -1,0 +1,16 @@
+tr_TR:
+  js:
+    resenha:
+      bans:
+        menu: "Yasakları yönet"
+        title: "Yasaklar — %{room_name}"
+        search_label: "Kullanıcı yasakla"
+        search_placeholder: "Kullanıcı ara"
+        ban: "Yasakla"
+        unban: "Yasağı kaldır"
+        empty: "Bu odadan yasaklanmış kimse yok."
+        banned_by: "%{username} tarafından yasaklandı"
+        confirm_ban: "@%{username} bu odadan yasaklansın mı? Aktif aramadan çıkarılacak ve yasağı kaldırılana kadar yeniden katılamayacak."
+        confirm_unban: "@%{username} kullanıcısının oda yasağı kaldırılsın mı?"
+        banned: "@%{username} odadan yasaklandı."
+        unbanned: "@%{username} kullanıcısının oda yasağı kaldırıldı."

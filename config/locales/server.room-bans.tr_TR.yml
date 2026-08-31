@@ -1,0 +1,8 @@
+tr_TR:
+  resenha:
+    errors:
+      room_banned: "Bu odadan yasaklandınız."
+      ephemeral_room_ban: "Geçici arama odalarında kalıcı yasak kullanılamaz."
+      cannot_ban_self: "Kendinizi bir odadan yasaklayamazsınız."
+      cannot_ban_creator: "Odanın kurucusu yasaklanamaz."
+      cannot_ban_manager: "Oda yöneticileri ve site görevlileri yasaklanamaz."

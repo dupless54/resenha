@@ -78,13 +78,30 @@ module Resenha
       end
     end
 
+    # A room ban is a durable server-side access rule. Managers are protected
+    # from bans, so the bypass here is also a defense against stale/manual rows.
+    def resenha_room_banned?(room)
+      return false unless can_access_resenha?
+      return false unless room
+      return false if can_manage_resenha_room?(room)
+
+      bans = room.room_bans
+      if bans.loaded?
+        bans.any? { |ban| ban.user_id == user.id }
+      else
+        bans.exists?(user_id: user.id)
+      end
+    end
+
     # Base room access deliberately ignores the temporary lock. Existing call
     # lifecycle endpoints (heartbeat, signaling, leave, reconnect/token refresh)
     # continue to use this permission and must not fail merely because a manager
-    # closed the room to new arrivals.
+    # closed the room to new arrivals. Durable bans, however, revoke room access
+    # and therefore apply to all of those endpoints after the user is evicted.
     def can_join_resenha_room?(room)
       return false unless can_access_resenha?
       return false unless room
+      return false if resenha_room_banned?(room)
 
       room.public? || room.member_ids.include?(user.id) || can_manage_resenha_room?(room)
     end
@@ -108,6 +125,10 @@ module Resenha
 
     def ensure_can_enter_resenha_room!(room)
       return if can_enter_resenha_room?(room)
+
+      if resenha_room_banned?(room)
+        raise Discourse::InvalidAccess.new(nil, nil, custom_message: "resenha.errors.room_banned")
+      end
 
       if can_join_resenha_room?(room) && room&.locked?
         raise Discourse::InvalidAccess.new(nil, nil, custom_message: "resenha.errors.room_locked")

@@ -8,6 +8,7 @@ import DButton from "discourse/ui-kit/d-button";
 import DDropdownMenu from "discourse/ui-kit/d-dropdown-menu";
 import { i18n } from "discourse-i18n";
 import ResenhaInviteUsersModal from "./modal/resenha-invite-users";
+import ResenhaManageBansModal from "./modal/resenha-manage-bans";
 import ResenhaRoomInfoModal from "./modal/resenha-room-info";
 
 export default class ResenhaRoomSidebarContextMenu extends Component {
@@ -40,6 +41,12 @@ export default class ResenhaRoomSidebarContextMenu extends Component {
   @action
   openInviteModal() {
     this.modal.show(ResenhaInviteUsersModal, { model: { room: this.room } });
+    this.args.close();
+  }
+
+  @action
+  openBansModal() {
+    this.modal.show(ResenhaManageBansModal, { model: { room: this.room } });
     this.args.close();
   }
 
@@ -160,6 +167,15 @@ export default class ResenhaRoomSidebarContextMenu extends Component {
                 "resenha.room.lock"
               }}
               class="resenha-room-sidebar-context-menu__toggle-lock"
+            />
+          </dropdown.item>
+          <dropdown.item>
+            <DButton
+              @action={{this.openBansModal}}
+              @icon="ban"
+              @label="resenha.bans.menu"
+              @title="resenha.bans.menu"
+              class="resenha-room-sidebar-context-menu__manage-bans"
             />
           </dropdown.item>
         {{/unless}}

@@ -31,6 +31,7 @@ module Resenha
     def invite!
       return if @user.id == @inviter.id || @user.bot?
       return unless @user.guardian.can_access_resenha?
+      return if @user.guardian.resenha_room_banned?(@room)
 
       ensure_membership! unless @room.public?
       return unless @user.guardian.can_join_resenha_room?(@room)

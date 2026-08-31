@@ -1,0 +1,8 @@
+en:
+  resenha:
+    errors:
+      room_banned: "You are banned from this room."
+      ephemeral_room_ban: "Temporary call rooms cannot have persistent bans."
+      cannot_ban_self: "You cannot ban yourself from a room."
+      cannot_ban_creator: "The room creator cannot be banned."
+      cannot_ban_manager: "Room managers and staff cannot be banned."
