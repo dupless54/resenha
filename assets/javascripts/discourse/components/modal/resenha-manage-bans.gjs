@@ -172,7 +172,7 @@ export default class ResenhaManageBansModal extends Component {
                 </div>
                 <DButton
                   @action={{fn this.unban ban}}
-                  @icon="rotate-left"
+                  @icon="xmark"
                   @label="resenha.bans.unban"
                   @disabled={{this.saving}}
                   class="btn-small resenha-manage-bans-modal__unban"
