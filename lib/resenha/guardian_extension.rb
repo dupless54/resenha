@@ -110,11 +110,7 @@ module Resenha
       return if can_enter_resenha_room?(room)
 
       if can_join_resenha_room?(room) && room&.locked?
-        raise Discourse::InvalidAccess.new(
-                nil,
-                nil,
-                custom_message: "resenha.errors.room_locked",
-              )
+        raise Discourse::InvalidAccess.new(nil, nil, custom_message: "resenha.errors.room_locked")
       end
 
       raise Discourse::InvalidAccess.new(I18n.t("resenha.errors.not_authorized"))
