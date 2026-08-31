@@ -3,3 +3,4 @@ tr_TR:
     resenha:
       participant:
         confirm_kick: "@%{username} bu odadan çıkarılsın mı? Yasaklamadığınız sürece odaya yeniden katılabilir."
+        kicked: "@%{username} odadan çıkarıldı."
