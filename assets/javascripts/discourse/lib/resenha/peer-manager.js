@@ -1,3 +1,5 @@
+import { meshConnectionQuality } from "./connection-quality";
+
 // The screen-share audio m-line is pre-negotiated like the video one, but
 // both audio transceivers on a connection report kind "audio", so the screen
 // one is remembered per connection instead of being inferred from m-line
@@ -279,6 +281,7 @@ export default class PeerManager {
       iceTransportPolicy: this.#getIceTransportPolicy(),
     });
     roomPeers.set(remoteUserId, pc);
+    meshConnectionQuality.registerPeer(roomId, remoteUserId, pc);
 
     const localStream = this.#getLocalStream();
     if (localStream) {
@@ -430,6 +433,7 @@ export default class PeerManager {
     const pc = peers?.get(remoteUserId);
 
     if (pc) {
+      meshConnectionQuality.unregisterPeer(roomId, remoteUserId, pc);
       pc.ontrack = null;
       pc.onicecandidate = null;
       pc.onconnectionstatechange = null;
