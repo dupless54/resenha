@@ -13,9 +13,14 @@ RSpec.describe Resenha::ParticipantPayload do
       described_class.build(
         participant,
         scope: guardian,
-        metadata: { role: "speaker", is_muted: true, staff: true },
+        metadata: {
+          role: "speaker",
+          is_muted: true,
+          staff: true
+        }
       )
-    staff_payload = described_class.build(staff, scope: guardian, metadata: { staff: false })
+    staff_payload =
+      described_class.build(staff, scope: guardian, metadata: { staff: false })
 
     expect(participant_payload[:id]).to eq(participant.id)
     expect(participant_payload[:role]).to eq("speaker")
