@@ -74,6 +74,7 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
       this.canManageRoom &&
       !this.room.ephemeral &&
       !this.isCurrentUser &&
+      !this.participant.staff &&
       this.participant.id !== this.room.creator_id &&
       this.participant.role !== "moderator"
     );
@@ -83,6 +84,7 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
     return (
       this.canManageRoom &&
       !this.isCurrentUser &&
+      !this.participant.staff &&
       this.participant.id !== this.room.creator_id &&
       this.participant.role !== "moderator"
     );
