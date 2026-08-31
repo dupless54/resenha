@@ -1,0 +1,7 @@
+tr_TR:
+  js:
+    resenha:
+      room:
+        full: "Oda dolu"
+        capacity: "Sesli oda kapasitesi: %{count}/%{max}"
+        capacity_full: "Oda dolu — %{count}/%{max}"
