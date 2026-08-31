@@ -28,9 +28,15 @@ module(
       this.selectedParticipantId = null;
       this.closed = false;
       this.menuData = {
-        room: { id: 1, room_type: "open" },
-        participant: { id: 2, username: "bob" },
+        room: {
+          id: 1,
+          room_type: "open",
+          ephemeral: false,
+          creator_id: 99,
+        },
+        participant: { id: 2, username: "bob", role: "participant" },
         isCurrentUser: false,
+        canManageRoom: false,
         onSpotlight: (participantId) => {
           this.selectedParticipantId = participantId;
         },
@@ -80,6 +86,68 @@ module(
         .dom(".resenha-participant-sidebar-context-menu__spotlight-btn")
         .hasText("Remove from spotlight", "offers to remove the spotlight")
         .hasAttribute("aria-pressed", "true", "exposes the active state");
+    });
+
+    test("offers quick ban to room managers for ordinary participants", async function (assert) {
+      this.menuData.canManageRoom = true;
+
+      await render(
+        <template>
+          <ResenhaParticipantSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
+
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__ban-btn")
+        .hasText("Ban", "offers the persistent ban action");
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__kick-btn")
+        .exists("keeps the separate kick action available");
+    });
+
+    test("hides quick ban in ephemeral rooms", async function (assert) {
+      this.menuData.canManageRoom = true;
+      this.menuData.room.ephemeral = true;
+
+      await render(
+        <template>
+          <ResenhaParticipantSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
+
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__ban-btn")
+        .doesNotExist("does not offer persistent bans for ephemeral calls");
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__kick-btn")
+        .exists("still allows a temporary kick");
+    });
+
+    test("hides destructive moderation for protected room targets", async function (assert) {
+      this.menuData.canManageRoom = true;
+      this.menuData.participant.role = "moderator";
+
+      await render(
+        <template>
+          <ResenhaParticipantSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
+
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__ban-btn")
+        .doesNotExist("does not offer ban for a room moderator");
+      assert
+        .dom(".resenha-participant-sidebar-context-menu__kick-btn")
+        .doesNotExist("does not offer kick for a room moderator");
     });
   }
 );
