@@ -5,6 +5,14 @@ import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import { logIn } from "discourse/tests/helpers/qunit-helpers";
 import ResenhaParticipantSidebarContextMenu from "discourse/plugins/resenha/discourse/components/resenha-participant-sidebar-context-menu";
 
+class DialogStub extends Service {
+  lastConfirmation = null;
+
+  yesNoConfirm(options) {
+    this.lastConfirmation = options;
+  }
+}
+
 class ResenhaWebrtcStub extends Service {
   getParticipantVolume() {
     return 1;
@@ -22,9 +30,12 @@ module(
 
     hooks.beforeEach(function () {
       logIn(this.owner);
+      this.owner.unregister("service:dialog");
+      this.owner.register("service:dialog", DialogStub);
       this.owner.unregister("service:resenha-webrtc");
       this.owner.register("service:resenha-webrtc", ResenhaWebrtcStub);
 
+      this.dialog = this.owner.lookup("service:dialog");
       this.selectedParticipantId = null;
       this.closed = false;
       this.menuData = {
@@ -106,6 +117,33 @@ module(
       assert
         .dom(".resenha-participant-sidebar-context-menu__kick-btn")
         .exists("keeps the separate kick action available");
+    });
+
+    test("requires confirmation before kicking a participant", async function (assert) {
+      this.menuData.canManageRoom = true;
+
+      await render(
+        <template>
+          <ResenhaParticipantSidebarContextMenu
+            @data={{this.menuData}}
+            @close={{this.closeMenu}}
+          />
+        </template>
+      );
+
+      await click(".resenha-participant-sidebar-context-menu__kick-btn");
+
+      assert.true(this.closed, "closes the participant menu before confirming");
+      assert.strictEqual(
+        this.dialog.lastConfirmation?.message,
+        "Kick @bob from this room? They can rejoin unless you ban them.",
+        "explains that kick is temporary"
+      );
+      assert.strictEqual(
+        typeof this.dialog.lastConfirmation?.didConfirm,
+        "function",
+        "defers the destructive request until explicit confirmation"
+      );
     });
 
     test("hides quick ban in ephemeral rooms", async function (assert) {
