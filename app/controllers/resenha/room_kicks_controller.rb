@@ -19,7 +19,7 @@ module Resenha
     private
 
     def load_room
-      @room = Resenha::Room.find(params[:room_id])
+      @room = Resenha::Room.find(params[:id])
     end
 
     def ensure_kickable!(user)
