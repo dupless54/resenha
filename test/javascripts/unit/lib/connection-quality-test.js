@@ -205,4 +205,44 @@ module("Resenha | Unit | Lib | connection-quality", function () {
 
     registry.resetForTesting();
   });
+
+  test("discarded async samples cannot resurrect quality after the last peer leaves", async function (assert) {
+    const registry = new MeshConnectionQualityRegistry({ intervalMs: 60_000 });
+    let resolveStats;
+    const pendingStats = new Promise((resolve) => {
+      resolveStats = resolve;
+    });
+    const peer = {
+      connectionState: "connected",
+      getStats() {
+        return pendingStats;
+      },
+    };
+
+    registry.registerPeer(11, 22, peer);
+    registry.unregisterPeer(11, 22, peer);
+
+    resolveStats(
+      statsReport([
+        {
+          id: "audio-stale",
+          type: "inbound-rtp",
+          kind: "audio",
+          packetsReceived: 20,
+          packetsLost: 0,
+          jitter: 0.005,
+        },
+      ])
+    );
+    await pendingStats;
+    await Promise.resolve();
+
+    assert.strictEqual(
+      registry.qualityFor(11),
+      null,
+      "stale getStats result stays invalid after teardown"
+    );
+
+    registry.resetForTesting();
+  });
 });
