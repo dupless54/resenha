@@ -1,0 +1,12 @@
+tr_TR:
+  js:
+    resenha:
+      connection_quality:
+        good: "İyi"
+        fair: "Orta"
+        poor: "Zayıf"
+        unknown: "Ölçülüyor…"
+        title_good: "Bağlantı kalitesi: İyi"
+        title_fair: "Bağlantı kalitesi: Orta"
+        title_poor: "Bağlantı kalitesi: Zayıf"
+        title_unknown: "Bağlantı kalitesi: Ölçülüyor…"
