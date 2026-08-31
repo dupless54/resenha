@@ -15,14 +15,8 @@ class CreateResenhaRoomBans < ActiveRecord::Migration[8.0]
               name: "idx_resenha_room_bans_on_room_and_user"
     add_index :resenha_room_bans, :banned_by_id
 
-    add_foreign_key :resenha_room_bans,
-                    :resenha_rooms,
-                    column: :room_id,
-                    on_delete: :cascade
+    add_foreign_key :resenha_room_bans, :resenha_rooms, column: :room_id, on_delete: :cascade
     add_foreign_key :resenha_room_bans, :users, column: :user_id, on_delete: :cascade
-    add_foreign_key :resenha_room_bans,
-                    :users,
-                    column: :banned_by_id,
-                    on_delete: :nullify
+    add_foreign_key :resenha_room_bans, :users, column: :banned_by_id, on_delete: :nullify
   end
 end
