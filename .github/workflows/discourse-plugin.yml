@@ -7,20 +7,5 @@ on:
   pull_request:
 
 jobs:
-  stree_probe:
-    runs-on: ubuntu-latest
-    container: discourse/discourse_test:slim
-    steps:
-      - uses: actions/checkout@v6
-      - run: bundle install
-      - name: Print canonical locked-room invite files
-        run: |
-          echo STREE_ADMISSION_BEGIN
-          bundle exec stree format app/controllers/resenha/room_admissions_controller.rb
-          echo STREE_ADMISSION_END
-          echo STREE_SPEC_BEGIN
-          bundle exec stree format spec/requests/resenha/locked_room_invite_admission_spec.rb
-          echo STREE_SPEC_END
-
   ci:
     uses: discourse/.github/.github/workflows/discourse-plugin.yml@v1
