@@ -78,7 +78,9 @@ export default class ResenhaRoomSidebarContextMenu extends Component {
         duration: "short",
         data: {
           message: i18n(
-            locking ? "resenha.room.locked_toast" : "resenha.room.unlocked_toast"
+            locking
+              ? "resenha.room.locked_toast"
+              : "resenha.room.unlocked_toast"
           ),
         },
       });
@@ -147,8 +149,16 @@ export default class ResenhaRoomSidebarContextMenu extends Component {
             <DButton
               @action={{this.toggleRoomLock}}
               @icon="lock"
-              @label={{if this.room.locked "resenha.room.unlock" "resenha.room.lock"}}
-              @title={{if this.room.locked "resenha.room.unlock" "resenha.room.lock"}}
+              @label={{if
+                this.room.locked
+                "resenha.room.unlock"
+                "resenha.room.lock"
+              }}
+              @title={{if
+                this.room.locked
+                "resenha.room.unlock"
+                "resenha.room.lock"
+              }}
               class="resenha-room-sidebar-context-menu__toggle-lock"
             />
           </dropdown.item>
