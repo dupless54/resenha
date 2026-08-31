@@ -68,10 +68,7 @@ function selectedRoundTripTimeMs(reports) {
     )
     .map((report) => finiteNumber(report.roundTripTime));
 
-  const roundTripTimeSeconds = maxDefined([
-    candidateRtt,
-    ...remoteAudioRtts,
-  ]);
+  const roundTripTimeSeconds = maxDefined([candidateRtt, ...remoteAudioRtts]);
   return roundTripTimeSeconds === null ? null : roundTripTimeSeconds * 1000;
 }
 
