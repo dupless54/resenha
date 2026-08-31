@@ -703,10 +703,7 @@ export default class PeerManager {
       return true;
     }
 
-    if (
-      this.#destroyed ||
-      this.#iceRefreshes.get(roomId)?.token !== token
-    ) {
+    if (this.#destroyed || this.#iceRefreshes.get(roomId)?.token !== token) {
       return false;
     }
 
