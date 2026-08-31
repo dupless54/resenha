@@ -237,6 +237,7 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
       message: i18n("resenha.bans.confirm_ban", {
         username: this.participant.username,
       }),
+      confirmButtonClass: "btn-danger",
       didConfirm: () => this.#ban(),
     });
   }
@@ -267,6 +268,7 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
       message: i18n("resenha.participant.confirm_kick", {
         username: this.participant.username,
       }),
+      confirmButtonClass: "btn-danger",
       didConfirm: () => this.#kick(),
     });
   }
@@ -276,6 +278,14 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
       await ajax(`/resenha/rooms/${this.room.id}/kick`, {
         type: "DELETE",
         data: { user_id: this.participant.id },
+      });
+      this.toasts.success({
+        duration: "short",
+        data: {
+          message: i18n("resenha.participant.kicked", {
+            username: this.participant.username,
+          }),
+        },
       });
     } catch (error) {
       popupAjaxError(error);
