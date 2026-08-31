@@ -7,17 +7,5 @@ on:
   pull_request:
 
 jobs:
-  stree_probe:
-    runs-on: ubuntu-latest
-    container: discourse/discourse_test:slim
-    steps:
-      - uses: actions/checkout@v6
-      - run: bundle install
-      - name: Print canonical participant payload spec
-        run: |
-          echo STREE_LINT_CANONICAL_BEGIN
-          bundle exec stree format spec/services/resenha/participant_payload_spec.rb
-          echo STREE_LINT_CANONICAL_END
-
   ci:
     uses: discourse/.github/.github/workflows/discourse-plugin.yml@v1
