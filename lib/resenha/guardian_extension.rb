@@ -112,13 +112,21 @@ module Resenha
       end
     end
 
+    # A pending invite is a one-use admission grant for a locked room. Base
+    # room access is still checked first, so bans, group access, and private-room
+    # membership remain authoritative.
+    def pending_resenha_room_invite?(room)
+      Resenha::Invite.exists?(room_id: room.id, user_id: user.id, redeemed_at: nil)
+    end
+
     # Admission is narrower than base room access: a lock blocks a genuinely
-    # new join, while managers and users still present in the authoritative
-    # roster may refresh/take over their existing grant.
+    # new join, while managers, explicitly invited users, and users still present
+    # in the authoritative roster may enter or refresh their existing grant.
     def can_enter_resenha_room?(room)
       return false unless can_join_resenha_room?(room)
       return true unless room.locked?
       return true if can_manage_resenha_room?(room)
+      return true if pending_resenha_room_invite?(room)
 
       Resenha::ParticipantTracker.user_ids(room.id).include?(user.id)
     end
