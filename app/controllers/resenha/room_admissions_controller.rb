@@ -6,9 +6,7 @@ module Resenha
       pending_invite = pending_locked_room_invite
       guardian.ensure_can_enter_resenha_room!(@room)
 
-      if pending_invite&.invited_by
-        params[:invited_by] = pending_invite.invited_by.username_lower
-      end
+      params[:invited_by] = pending_invite.invited_by.username_lower if pending_invite&.invited_by
 
       super
       redeem_pending_invite!(pending_invite)
