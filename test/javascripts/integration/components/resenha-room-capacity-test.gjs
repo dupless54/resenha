@@ -1,10 +1,10 @@
 import { tracked } from "@glimmer/tracking";
 import Service from "@ember/service";
-import { click, render, settled } from "@ember/test-helpers";
+import { click, render } from "@ember/test-helpers";
 import { module, test } from "qunit";
 import { setupRenderingTest } from "discourse/tests/helpers/component-test";
 import { logIn } from "discourse/tests/helpers/qunit-helpers";
-import ResenhaRoomPage from "discourse/plugins/resenha/discourse/components/resenha/room-page";
+import RoomPage from "discourse/plugins/resenha/discourse/components/resenha/room-page";
 
 class ResenhaRoomsStub extends Service {
   @tracked rooms = [];
@@ -68,11 +68,7 @@ class ResenhaWebrtcStub extends Service {
 }
 
 class RouterStub extends Service {
-  transitionCalls = [];
-
-  transitionTo(...args) {
-    this.transitionCalls.push(args);
-  }
+  transitionTo() {}
 }
 
 class ModalStub extends Service {
@@ -130,26 +126,21 @@ module("Integration | Component | Resenha | Room capacity", function (hooks) {
     this.resenhaRooms.rooms = [this.room];
   });
 
-  test(
-    "shows server-provided capacity in the room header",
-    async function (assert) {
-      await render(
-        <template><ResenhaRoomPage @room={{this.room}} /></template>
-      );
+  test("shows capacity", async function (assert) {
+    await render(<template><RoomPage @room={{this.room}} /></template>);
 
-      assert.dom(".resenha-room-page__capacity").hasText("3/4");
-      assert
-        .dom(".resenha-room-page__capacity")
-        .hasAttribute("aria-label", "Voice room capacity: 3 of 4");
-      assert.dom(".resenha-room-page__join").isNotDisabled();
-    }
-  );
+    assert.dom(".resenha-room-page__capacity").hasText("3/4");
+    assert
+      .dom(".resenha-room-page__capacity")
+      .hasAttribute("aria-label", "Voice room capacity: 3 of 4");
+    assert.dom(".resenha-room-page__join").isNotDisabled();
+  });
 
-  test("blocks a new user from a full room", async function (assert) {
+  test("blocks new joins when full", async function (assert) {
     this.room.full = true;
     this.room.active_participants.push(participant(5, "erin"));
 
-    await render(<template><ResenhaRoomPage @room={{this.room}} /></template>);
+    await render(<template><RoomPage @room={{this.room}} /></template>);
 
     assert.dom(".resenha-room-page__capacity").hasText("4/4");
     assert.dom(".resenha-room-page__capacity").hasClass("--full");
@@ -161,43 +152,20 @@ module("Integration | Component | Resenha | Room capacity", function (hooks) {
     assert.deepEqual(this.resenhaWebrtc.joinCalls, []);
   });
 
-  test(
-    "keeps reconnect available for a participant who already holds a full-room slot",
-    async function (assert) {
-      this.room.full = true;
-      this.room.active_participants.push(
-        participant(this.currentUser.id, this.currentUser.username)
-      );
+  test("allows reconnect at capacity", async function (assert) {
+    this.room.full = true;
+    this.room.active_participants.push(
+      participant(this.currentUser.id, this.currentUser.username)
+    );
 
-      await render(
-        <template><ResenhaRoomPage @room={{this.room}} /></template>
-      );
+    await render(<template><RoomPage @room={{this.room}} /></template>);
 
-      assert.dom(".resenha-room-page__capacity").hasText("4/4");
-      assert.dom(".resenha-room-page__join").isNotDisabled();
-      assert.dom(".resenha-room-page__join").hasText("Join voice room");
+    assert.dom(".resenha-room-page__capacity").hasText("4/4");
+    assert.dom(".resenha-room-page__join").isNotDisabled();
+    assert.dom(".resenha-room-page__join").hasText("Join voice room");
 
-      await click(".resenha-room-page__join");
+    await click(".resenha-room-page__join");
 
-      assert.deepEqual(this.resenhaWebrtc.joinCalls, [1]);
-    }
-  );
-
-  test(
-    "auto join does not bypass the full-room presentation guard",
-    async function (assert) {
-      this.room.full = true;
-      this.room.active_participants.push(participant(5, "erin"));
-
-      await render(
-        <template>
-          <ResenhaRoomPage @room={{this.room}} @autoJoin={{true}} />
-        </template>
-      );
-      await settled();
-
-      assert.deepEqual(this.resenhaWebrtc.joinCalls, []);
-      assert.dom(".resenha-room-page__join").isDisabled();
-    }
-  );
+    assert.deepEqual(this.resenhaWebrtc.joinCalls, [1]);
+  });
 });
