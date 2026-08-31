@@ -5,7 +5,7 @@ Resenha::Engine.routes.draw do
 
   resources :rooms do
     member do
-      post :join
+      post :join, controller: "room_admissions"
       post :heartbeat
       delete :leave
       get :participants
@@ -23,6 +23,8 @@ Resenha::Engine.routes.draw do
       post :request_to_speak
       delete :request_to_speak, action: :withdraw_request_to_speak, as: :withdraw_request_to_speak
     end
+
+    resource :lock, controller: "room_locks", only: %i[update destroy]
 
     resources :memberships, controller: "room_memberships", only: %i[index create update destroy]
 

@@ -179,6 +179,7 @@ end
 #  ephemeral           :boolean          default(FALSE), not null
 #  last_occupied_at    :datetime
 #  livekit_enabled     :boolean          default(FALSE), not null
+#  locked              :boolean          default(FALSE), not null
 #  max_participants    :integer
 #  max_quality_profile :integer
 #  name                :string           not null

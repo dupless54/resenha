@@ -8,6 +8,7 @@ module Resenha
                :description,
                :cooked_description,
                :public,
+               :locked,
                :ephemeral,
                :room_type,
                :max_participants,
@@ -107,8 +108,16 @@ module Resenha
       @can_manage = scope.can_manage_resenha_room?(object)
     end
 
+    def include_can_manage?
+      scope.user.present?
+    end
+
     def can_invite
       scope.can_invite_to_resenha_room?(object)
+    end
+
+    def include_can_invite?
+      scope.user.present?
     end
 
     def description_excerpt

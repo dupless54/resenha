@@ -1,0 +1,8 @@
+tr_TR:
+  js:
+    resenha:
+      room:
+        lock: "Odayı kilitle"
+        unlock: "Oda kilidini aç"
+        locked_toast: "Oda kilitlendi. Yeni katılımcılar katılamaz."
+        unlocked_toast: "Odanın kilidi açıldı."

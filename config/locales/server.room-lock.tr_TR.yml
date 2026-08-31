@@ -1,0 +1,5 @@
+tr_TR:
+  resenha:
+    errors:
+      room_locked: "Bu oda kilitli. Yeni katılımcılar şu anda katılamaz."
+      ephemeral_room_lock: "Geçici arama odaları kilitlenemez."

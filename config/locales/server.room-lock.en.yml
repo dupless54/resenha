@@ -1,0 +1,5 @@
+en:
+  resenha:
+    errors:
+      room_locked: "This room is locked. New participants cannot join right now."
+      ephemeral_room_lock: "Temporary call rooms cannot be locked."

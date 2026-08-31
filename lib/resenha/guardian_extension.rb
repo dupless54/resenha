@@ -78,6 +78,10 @@ module Resenha
       end
     end
 
+    # Base room access deliberately ignores the temporary lock. Existing call
+    # lifecycle endpoints (heartbeat, signaling, leave, reconnect/token refresh)
+    # continue to use this permission and must not fail merely because a manager
+    # closed the room to new arrivals.
     def can_join_resenha_room?(room)
       return false unless can_access_resenha?
       return false unless room
@@ -91,11 +95,35 @@ module Resenha
       end
     end
 
+    # Admission is narrower than base room access: a lock blocks a genuinely
+    # new join, while managers and users still present in the authoritative
+    # roster may refresh/take over their existing grant.
+    def can_enter_resenha_room?(room)
+      return false unless can_join_resenha_room?(room)
+      return true unless room.locked?
+      return true if can_manage_resenha_room?(room)
+
+      Resenha::ParticipantTracker.user_ids(room.id).include?(user.id)
+    end
+
+    def ensure_can_enter_resenha_room!(room)
+      return if can_enter_resenha_room?(room)
+
+      if can_join_resenha_room?(room) && room&.locked?
+        raise Discourse::InvalidAccess.new(nil, nil, custom_message: "resenha.errors.room_locked")
+      end
+
+      raise Discourse::InvalidAccess.new(I18n.t("resenha.errors.not_authorized"))
+    end
+
     # Inviting is sharing access you already have: anyone who can join a
     # public room may invite others to it, while a private room's roster is a
-    # management concern — inviting there grants a membership.
+    # management concern — inviting there grants a membership. A temporary
+    # room lock pauses ordinary public-room invites so recipients are not sent
+    # into an admission error; room managers may still invite.
     def can_invite_to_resenha_room?(room)
       return false unless can_join_resenha_room?(room)
+      return can_manage_resenha_room?(room) if room.locked?
 
       room.public? || can_manage_resenha_room?(room)
     end
