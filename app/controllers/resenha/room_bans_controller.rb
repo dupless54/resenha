@@ -6,7 +6,8 @@ module Resenha
     before_action :ensure_manageable_persistent_room!
 
     def index
-      render json: { bans: @room.room_bans.includes(:user, :banned_by).order(created_at: :desc).map { |ban| serialize_ban(ban) } }
+      bans = @room.room_bans.includes(:user, :banned_by).order(created_at: :desc)
+      render json: { bans: bans.map { |ban| serialize_ban(ban) } }
     end
 
     def create
@@ -38,9 +39,10 @@ module Resenha
 
     def ensure_manageable_persistent_room!
       guardian.ensure_can_manage_resenha_room!(@room)
-      if @room.ephemeral?
-        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.ephemeral_room_ban"))
-      end
+      return unless @room.ephemeral?
+
+      message = I18n.t("resenha.errors.ephemeral_room_ban")
+      raise Discourse::InvalidParameters.new(message)
     end
 
     def fetch_user
@@ -56,27 +58,32 @@ module Resenha
 
     def ensure_bannable!(user)
       if user.id == current_user.id
-        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.cannot_ban_self"))
+        message = I18n.t("resenha.errors.cannot_ban_self")
+        raise Discourse::InvalidParameters.new(message)
       end
 
       if user.id == @room.creator_id
-        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.cannot_ban_creator"))
+        message = I18n.t("resenha.errors.cannot_ban_creator")
+        raise Discourse::InvalidParameters.new(message)
       end
 
       membership = @room.room_memberships.find_by(user_id: user.id)
       if user.staff? || membership&.moderator?
-        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.cannot_ban_manager"))
+        message = I18n.t("resenha.errors.cannot_ban_manager")
+        raise Discourse::InvalidParameters.new(message)
       end
     end
 
     def serialize_ban(ban)
+      banned_by =
+        if ban.banned_by
+          BasicUserSerializer.new(ban.banned_by, scope: guardian, root: false).as_json
+        end
+
       {
         id: ban.id,
         user: BasicUserSerializer.new(ban.user, scope: guardian, root: false).as_json,
-        banned_by:
-          if ban.banned_by
-            BasicUserSerializer.new(ban.banned_by, scope: guardian, root: false).as_json
-          end,
+        banned_by: banned_by,
         created_at: ban.created_at,
       }
     end
