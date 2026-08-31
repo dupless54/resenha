@@ -68,6 +68,7 @@ register_svg_icon "stop"
 register_svg_icon "far-file-lines"
 register_asset "stylesheets/common/resenha.scss"
 register_asset "stylesheets/common/resenha-room-page.scss"
+register_asset "stylesheets/common/resenha-room-capacity.scss"
 register_asset "stylesheets/common/resenha-chat.scss"
 register_asset "stylesheets/common/resenha-admin.scss", :admin
 

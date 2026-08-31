@@ -23,6 +23,12 @@ import {
   trackFullscreen,
 } from "../../lib/resenha/fullscreen";
 import { activeRingingEntries } from "../../lib/resenha/ringing";
+import {
+  activeParticipantCount,
+  effectiveRoomCapacity,
+  roomCapacityBlocksJoin,
+  roomCapacityLabel,
+} from "../../lib/resenha/room-capacity";
 import { speakQueue } from "../../lib/resenha/speak-queue";
 import {
   bestRowHeight,
@@ -136,6 +142,36 @@ export default class ResenhaRoomPage extends Component {
 
   get participants() {
     return this.room.active_participants || [];
+  }
+
+  get capacityLabel() {
+    return roomCapacityLabel(this.room);
+  }
+
+  get capacityStatusLabel() {
+    const capacity = effectiveRoomCapacity(this.room);
+    if (!capacity) {
+      return null;
+    }
+
+    const key = this.room.full
+      ? "resenha.room.capacity_full"
+      : "resenha.room.capacity";
+
+    return i18n(key, {
+      count: activeParticipantCount(this.room),
+      max: capacity,
+    });
+  }
+
+  get capacityBlocksJoin() {
+    return roomCapacityBlocksJoin(this.room, this.currentUser?.id);
+  }
+
+  get joinButtonLabel() {
+    return this.capacityBlocksJoin
+      ? i18n("resenha.room.full")
+      : i18n("resenha.room.join");
   }
 
   get tiles() {
@@ -347,6 +383,10 @@ export default class ResenhaRoomPage extends Component {
 
   @action
   joinRoom() {
+    if (this.capacityBlocksJoin) {
+      return;
+    }
+
     if (!this.currentUser) {
       getOwner(this).lookup("route:application").send("showLogin");
       return;
@@ -572,6 +612,19 @@ export default class ResenhaRoomPage extends Component {
           <header class="resenha-room-page__header">
             <div class="resenha-room-page__title-row">
               <h1 class="resenha-room-page__title">{{this.room.name}}</h1>
+              {{#if this.capacityLabel}}
+                <span
+                  class={{dConcatClass
+                    "resenha-room-page__capacity"
+                    (if this.room.full "--full")
+                  }}
+                  title={{this.capacityStatusLabel}}
+                  aria-label={{this.capacityStatusLabel}}
+                >
+                  {{dIcon "users"}}
+                  <span aria-hidden="true">{{this.capacityLabel}}</span>
+                </span>
+              {{/if}}
               <ResenhaRecordingBadge @room={{this.room}} />
               <ResenhaTranscriptBadge @room={{this.room}} />
             </div>
@@ -803,8 +856,8 @@ export default class ResenhaRoomPage extends Component {
                 <DButton
                   @action={{this.joinRoom}}
                   @icon="phone"
-                  @label="resenha.room.join"
-                  @disabled={{this.connecting}}
+                  @translatedLabel={{this.joinButtonLabel}}
+                  @disabled={{or this.connecting this.capacityBlocksJoin}}
                   @isLoading={{this.connecting}}
                   class="btn-primary resenha-room-page__join"
                 />
