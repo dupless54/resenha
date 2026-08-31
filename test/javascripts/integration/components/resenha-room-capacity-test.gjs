@@ -130,15 +130,20 @@ module("Integration | Component | Resenha | Room capacity", function (hooks) {
     this.resenhaRooms.rooms = [this.room];
   });
 
-  test("shows server-provided capacity in the room header", async function (assert) {
-    await render(<template><ResenhaRoomPage @room={{this.room}} /></template>);
+  test(
+    "shows server-provided capacity in the room header",
+    async function (assert) {
+      await render(
+        <template><ResenhaRoomPage @room={{this.room}} /></template>
+      );
 
-    assert.dom(".resenha-room-page__capacity").hasText("3/4");
-    assert
-      .dom(".resenha-room-page__capacity")
-      .hasAttribute("aria-label", "Voice room capacity: 3 of 4");
-    assert.dom(".resenha-room-page__join").isNotDisabled();
-  });
+      assert.dom(".resenha-room-page__capacity").hasText("3/4");
+      assert
+        .dom(".resenha-room-page__capacity")
+        .hasAttribute("aria-label", "Voice room capacity: 3 of 4");
+      assert.dom(".resenha-room-page__join").isNotDisabled();
+    }
+  );
 
   test("blocks a new user from a full room", async function (assert) {
     this.room.full = true;
@@ -178,16 +183,21 @@ module("Integration | Component | Resenha | Room capacity", function (hooks) {
     }
   );
 
-  test("auto join does not bypass the full-room presentation guard", async function (assert) {
-    this.room.full = true;
-    this.room.active_participants.push(participant(5, "erin"));
+  test(
+    "auto join does not bypass the full-room presentation guard",
+    async function (assert) {
+      this.room.full = true;
+      this.room.active_participants.push(participant(5, "erin"));
 
-    await render(
-      <template><ResenhaRoomPage @room={{this.room}} @autoJoin={{true}} /></template>
-    );
-    await settled();
+      await render(
+        <template>
+          <ResenhaRoomPage @room={{this.room}} @autoJoin={{true}} />
+        </template>
+      );
+      await settled();
 
-    assert.deepEqual(this.resenhaWebrtc.joinCalls, []);
-    assert.dom(".resenha-room-page__join").isDisabled();
-  });
+      assert.deepEqual(this.resenhaWebrtc.joinCalls, []);
+      assert.dom(".resenha-room-page__join").isDisabled();
+    }
+  );
 });
