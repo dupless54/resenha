@@ -3,5 +3,5 @@ export default function roomIcon(room) {
 }
 
 export function roomBadge(room) {
-  return room.public ? null : "lock";
+  return room.public && !room.locked ? null : "lock";
 }

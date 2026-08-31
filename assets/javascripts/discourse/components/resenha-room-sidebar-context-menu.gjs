@@ -1,6 +1,8 @@
 import Component from "@glimmer/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import { ajax } from "discourse/lib/ajax";
+import { popupAjaxError } from "discourse/lib/ajax-error";
 import { clipboardCopy } from "discourse/lib/utilities";
 import DButton from "discourse/ui-kit/d-button";
 import DDropdownMenu from "discourse/ui-kit/d-dropdown-menu";
@@ -10,6 +12,7 @@ import ResenhaRoomInfoModal from "./modal/resenha-room-info";
 
 export default class ResenhaRoomSidebarContextMenu extends Component {
   @service modal;
+  @service resenhaRooms;
   @service resenhaWebrtc;
   @service router;
   @service toasts;
@@ -57,6 +60,33 @@ export default class ResenhaRoomSidebarContextMenu extends Component {
       model: { room: this.room, isEditing: true },
     });
     this.args.close();
+  }
+
+  @action
+  async toggleRoomLock() {
+    const locking = !this.room.locked;
+
+    try {
+      const result = await ajax(`/resenha/rooms/${this.room.id}/lock`, {
+        type: locking ? "PUT" : "DELETE",
+      });
+      this.resenhaRooms.handleDirectoryEvent({
+        type: "updated",
+        room: result.room,
+      });
+      this.toasts.success({
+        duration: "short",
+        data: {
+          message: i18n(
+            locking ? "resenha.room.locked_toast" : "resenha.room.unlocked_toast"
+          ),
+        },
+      });
+    } catch (error) {
+      popupAjaxError(error);
+    } finally {
+      this.args.close();
+    }
   }
 
   @action
@@ -112,6 +142,17 @@ export default class ResenhaRoomSidebarContextMenu extends Component {
         />
       </dropdown.item>
       {{#if this.room.can_manage}}
+        {{#unless this.room.ephemeral}}
+          <dropdown.item>
+            <DButton
+              @action={{this.toggleRoomLock}}
+              @icon="lock"
+              @label={{if this.room.locked "resenha.room.unlock" "resenha.room.lock"}}
+              @title={{if this.room.locked "resenha.room.unlock" "resenha.room.lock"}}
+              class="resenha-room-sidebar-context-menu__toggle-lock"
+            />
+          </dropdown.item>
+        {{/unless}}
         <dropdown.item>
           <DButton
             @action={{this.editRoom}}

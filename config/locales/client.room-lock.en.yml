@@ -1,0 +1,8 @@
+en:
+  js:
+    resenha:
+      room:
+        lock: "Lock room"
+        unlock: "Unlock room"
+        locked_toast: "Room locked. New participants cannot join."
+        unlocked_toast: "Room unlocked."

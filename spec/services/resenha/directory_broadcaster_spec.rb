@@ -18,6 +18,8 @@ RSpec.describe Resenha::DirectoryBroadcaster do
     expect(messages.size).to eq(1)
     expect(messages.first.user_ids).to be_nil
     expect(messages.first.group_ids).to be_nil
+    expect(messages.first.data[:room]).not_to have_key(:can_manage)
+    expect(messages.first.data[:room]).not_to have_key(:can_invite)
   end
 
   it "excludes anonymous subscribers when allowed groups are logged_in_users" do

@@ -3,11 +3,13 @@ import Service, { service } from "@ember/service";
 import { ajax } from "discourse/lib/ajax";
 import { bind } from "discourse/lib/decorators";
 
-// Directory broadcasts are serialized without a user, so fields the server
-// gates per user (chat availability, manager-only chat settings) are absent
+// Directory broadcasts are serialized without a user, so per-user room
+// permissions, chat availability, and manager-only chat settings are omitted
 // from them. A broadcast replaces the whole room object; carry over what this
-// client already knows so a mid-call room update doesn't wipe its own state.
+// client already knows so a room update doesn't wipe its authorized UI state.
 const USER_GATED_ROOM_FIELDS = [
+  "can_manage",
+  "can_invite",
   "chat_available",
   "chat_channel_id",
   "chat_idle_minutes",
