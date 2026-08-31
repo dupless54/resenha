@@ -38,5 +38,32 @@ module(
 
       assert.dom(".resenha-connection-quality").doesNotExist();
     });
+
+    test("shows reconnecting while recovery is active and falls back to measured quality", async function (assert) {
+      const room = { id: 43 };
+      const peer = { connectionState: "disconnected" };
+
+      await render(
+        <template><ResenhaConnectionQualityBadge @room={{room}} /></template>
+      );
+
+      meshConnectionQuality.registerPeer(room.id, 10, peer);
+      meshConnectionQuality.markReconnecting(room.id, 10);
+      await settled();
+
+      assert.dom(".resenha-connection-quality.--reconnecting").exists();
+      assert.dom(".resenha-connection-quality").hasText("Reconnecting…");
+      assert
+        .dom(".resenha-connection-quality")
+        .hasAttribute("aria-label", "Connection status: Reconnecting…");
+
+      meshConnectionQuality.clearReconnecting(room.id, 10);
+      await settled();
+
+      assert.dom(".resenha-connection-quality.--poor").exists();
+      assert.dom(".resenha-connection-quality").hasText("Poor");
+
+      meshConnectionQuality.unregisterPeer(room.id, 10, peer);
+    });
   }
 );
