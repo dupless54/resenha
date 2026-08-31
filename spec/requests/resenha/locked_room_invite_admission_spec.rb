@@ -42,10 +42,7 @@ RSpec.describe "locked room invite admission" do
     expect(invite.redeemed_at).to be_nil
 
     sign_in(invitee)
-    post "/resenha/rooms/#{room.id}/join.json",
-         params: {
-           invited_by: owner.username_lower,
-         }
+    post "/resenha/rooms/#{room.id}/join.json"
 
     expect(response.status).to eq(200)
     participant_session_id = response.parsed_body["participant_session_id"]
