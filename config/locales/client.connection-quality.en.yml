@@ -1,0 +1,12 @@
+en:
+  js:
+    resenha:
+      connection_quality:
+        good: "Good"
+        fair: "Fair"
+        poor: "Poor"
+        unknown: "Measuring…"
+        title_good: "Connection quality: Good"
+        title_fair: "Connection quality: Fair"
+        title_poor: "Connection quality: Poor"
+        title_unknown: "Connection quality: Measuring…"
