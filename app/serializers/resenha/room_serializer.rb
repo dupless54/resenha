@@ -198,7 +198,7 @@ module Resenha
     end
 
     def participating?
-      scope.user.present? && tracked_participants.any? { |user| user.id == scope.user&.id }
+      scope.user.present? && tracked_participants.any? { |user| user.id == scope.user.id }
     end
   end
 end
