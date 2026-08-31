@@ -68,10 +68,7 @@ RSpec.describe Resenha::RoomBansController do
 
     it "does not delete private-room membership" do
       room.update!(public: false)
-      room.room_memberships.create!(
-        user: user,
-        role: Resenha::RoomMembership::ROLE_PARTICIPANT,
-      )
+      room.room_memberships.create!(user: user, role: Resenha::RoomMembership::ROLE_PARTICIPANT)
       sign_in(owner)
 
       post "/resenha/rooms/#{room.id}/bans.json", params: { user_id: user.id }
@@ -92,10 +89,7 @@ RSpec.describe Resenha::RoomBansController do
 
     it "rejects self, creator, staff, and room managers" do
       moderator = Fabricate(:user, trust_level: TrustLevel[2])
-      room.room_memberships.create!(
-        user: moderator,
-        role: Resenha::RoomMembership::ROLE_MODERATOR,
-      )
+      room.room_memberships.create!(user: moderator, role: Resenha::RoomMembership::ROLE_MODERATOR)
       admin = Fabricate(:admin)
       sign_in(owner)
 
@@ -140,10 +134,7 @@ RSpec.describe Resenha::RoomBansController do
   describe "DELETE /resenha/rooms/:room_id/bans/:id" do
     it "restores ordinary room admission without changing membership" do
       room.update!(public: false)
-      room.room_memberships.create!(
-        user: user,
-        role: Resenha::RoomMembership::ROLE_PARTICIPANT,
-      )
+      room.room_memberships.create!(user: user, role: Resenha::RoomMembership::ROLE_PARTICIPANT)
       ban = room.room_bans.create!(user: user, banned_by: owner)
       sign_in(owner)
 
