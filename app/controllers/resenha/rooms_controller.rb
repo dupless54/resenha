@@ -412,11 +412,11 @@ module Resenha
                  Resenha::ParticipantTracker
                    .list(@room.id)
                    .map do |user|
-                     BasicUserSerializer
-                       .new(user, scope: guardian, root: false)
-                       .as_json
-                       .merge(all_metadata[user.id] || {})
-                       .merge(staff: user.staff?)
+                     Resenha::ParticipantPayload.build(
+                       user,
+                       scope: guardian,
+                       metadata: all_metadata[user.id],
+                     )
                    end,
              }
     end
