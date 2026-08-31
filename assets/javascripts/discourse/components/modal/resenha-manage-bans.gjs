@@ -78,7 +78,10 @@ export default class ResenhaManageBansModal extends Component {
         type: "POST",
         data: { username },
       });
-      this.bans = [result.ban, ...this.bans.filter((ban) => ban.id !== result.ban.id)];
+      this.bans = [
+        result.ban,
+        ...this.bans.filter((ban) => ban.id !== result.ban.id),
+      ];
       this.selectedUsernames = [];
       this.toasts.success({
         duration: "short",
