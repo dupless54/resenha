@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 Resenha::Engine.routes.draw do
+  post "rooms/:room_id/ice" => "ice#refresh"
+
   resources :rooms do
     member do
       post :join
