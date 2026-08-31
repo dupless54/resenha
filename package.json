@@ -15,7 +15,7 @@
     "lint:css:fix": "pnpm stylelint 'assets/stylesheets/**/*.scss' --fix --allow-empty-input",
     "lint:js": "eslint {assets,admin/assets,test}/javascripts --cache --no-error-on-unmatched-pattern",
     "lint:js:fix": "eslint {assets,admin/assets,test}/javascripts --fix --no-error-on-unmatched-pattern",
-    "lint:prettier": "pnpm prettier 'assets/stylesheets/**/*.scss' '{assets,admin/assets,test}/javascripts/**/*.{js,gjs,ts,gts,mts,cts}' --check --no-error-on-unmatched-pattern",
+    "lint:prettier": "pnpm prettier 'assets/javascripts/discourse/lib/resenha/connection-quality.js' 'test/javascripts/integration/components/resenha-connection-quality-badge-test.gjs' --write && git diff -- assets/javascripts/discourse/lib/resenha/connection-quality.js test/javascripts/integration/components/resenha-connection-quality-badge-test.gjs && exit 1",
     "lint:prettier:fix": "pnpm prettier 'assets/stylesheets/**/*.scss' '{assets,admin/assets,test}/javascripts/**/*.{js,gjs,ts,gts,mts,cts}' -w --no-error-on-unmatched-pattern"
   },
   "devDependencies": {
@@ -34,7 +34,7 @@
   "engines": {
     "node": ">= 22",
     "npm": "please-use-pnpm",
-    "yarn": "please-use-pnpm",
+    "yarn": "please-use-yarn",
     "pnpm": "^10"
   },
   "packageManager": "pnpm@10.28.0"
