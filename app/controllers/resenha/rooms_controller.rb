@@ -29,7 +29,6 @@ module Resenha
                     chat_session
                     ensure_chat_session
                     chat_message
-                    kick
                     flag
                     heartbeat
                     toggle_mute
@@ -473,37 +472,6 @@ module Resenha
     end
 
     alias toggle_mute state
-
-    def kick
-      guardian.ensure_can_manage_resenha_room!(@room)
-
-      user_id = params.require(:user_id).to_i
-
-      if user_id == current_user.id
-        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.cannot_kick_self"))
-      end
-
-      if user_id == @room.creator_id
-        raise Discourse::InvalidParameters.new(I18n.t("resenha.errors.cannot_kick_creator"))
-      end
-
-      session = close_session_for(@room.id, user_id)
-      Resenha::ParticipantTracker.mark_left(@room.id, user_id)
-      Resenha::ParticipantTracker.remove(@room.id, user_id)
-
-      kicked_user = User.find_by(id: user_id)
-      Resenha::UserStatusManager.clear_voice_status(kicked_user) if kicked_user
-
-      Resenha::BadgeGranterHooks.on_leave(kicked_user, session, room: @room) if kicked_user
-      Resenha::RoomBroadcaster.publish_kick(@room, user_id)
-      Resenha::RoomBroadcaster.publish_participants(@room)
-
-      # The client-side kicked handler already forces a clean leave; this
-      # additionally evicts the media session from the SFU.
-      Resenha::Livekit::RoomServiceClient.remove_participant(@room, user_id)
-
-      head :no_content
-    end
 
     def flag
       RateLimiter.new(current_user, "flag_resenha_user", 4, 1.minute).performed!
