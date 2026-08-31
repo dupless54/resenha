@@ -26,6 +26,7 @@ Resenha::Engine.routes.draw do
 
     resource :lock, controller: "room_locks", only: %i[update destroy]
 
+    resources :bans, controller: "room_bans", only: %i[index create destroy]
     resources :memberships, controller: "room_memberships", only: %i[index create update destroy]
 
     resources :invites, only: %i[create] do
