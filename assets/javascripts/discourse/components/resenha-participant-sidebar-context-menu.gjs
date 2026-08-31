@@ -17,9 +17,11 @@ import ResenhaPttKeyCapture from "./resenha-ptt-key-capture";
 
 export default class ResenhaParticipantSidebarContextMenu extends Component {
   @service currentUser;
+  @service dialog;
   @service modal;
   @service resenhaWebrtc;
   @service siteSettings;
+  @service toasts;
 
   @tracked volume = 100;
   @tracked isMuted = false;
@@ -67,8 +69,23 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
       : i18n("resenha.participant.spotlight");
   }
 
+  get canBan() {
+    return (
+      this.canManageRoom &&
+      !this.room.ephemeral &&
+      !this.isCurrentUser &&
+      this.participant.id !== this.room.creator_id &&
+      this.participant.role !== "moderator"
+    );
+  }
+
   get canKick() {
-    return this.canManageRoom && this.participant.id !== this.room.creator_id;
+    return (
+      this.canManageRoom &&
+      !this.isCurrentUser &&
+      this.participant.id !== this.room.creator_id &&
+      this.participant.role !== "moderator"
+    );
   }
 
   get canFlag() {
@@ -211,6 +228,36 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
   toggleSpotlight() {
     this.args.data.onSpotlight(this.participant.id);
     this.args.close();
+  }
+
+  @action
+  ban() {
+    this.args.close();
+    this.dialog.yesNoConfirm({
+      message: i18n("resenha.bans.confirm_ban", {
+        username: this.participant.username,
+      }),
+      didConfirm: () => this.#ban(),
+    });
+  }
+
+  async #ban() {
+    try {
+      await ajax(`/resenha/rooms/${this.room.id}/bans`, {
+        type: "POST",
+        data: { user_id: this.participant.id },
+      });
+      this.toasts.success({
+        duration: "short",
+        data: {
+          message: i18n("resenha.bans.banned", {
+            username: this.participant.username,
+          }),
+        },
+      });
+    } catch (error) {
+      popupAjaxError(error);
+    }
   }
 
   @action
@@ -557,6 +604,17 @@ export default class ResenhaParticipantSidebarContextMenu extends Component {
               @label="resenha.participant.flag"
               @title="resenha.participant.flag"
               class="resenha-participant-sidebar-context-menu__flag-btn"
+            />
+          </dropdown.item>
+        {{/if}}
+        {{#if this.canBan}}
+          <dropdown.item>
+            <DButton
+              @action={{this.ban}}
+              @icon="ban"
+              @label="resenha.bans.ban"
+              @title="resenha.bans.ban"
+              class="resenha-participant-sidebar-context-menu__ban-btn btn-danger"
             />
           </dropdown.item>
         {{/if}}
