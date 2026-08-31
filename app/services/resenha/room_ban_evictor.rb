@@ -3,7 +3,7 @@
 module Resenha
   class RoomBanEvictor
     def self.evict!(room:, user:)
-      return unless Resenha::ParticipantTracker.user_ids(room.id).include?(user.id)
+      return if Resenha::ParticipantTracker.user_ids(room.id).exclude?(user.id)
 
       metadata = Resenha::ParticipantTracker.get_metadata(room.id, user.id)
       session = Resenha::Session.find_by(id: metadata[:session_id]) if metadata[:session_id]
