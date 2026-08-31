@@ -190,43 +190,66 @@ export async function samplePeerConnectionQuality(
   });
 }
 
-export default class ConnectionQualityMonitor {
-  #peerManager;
-  #onChange;
+export class MeshConnectionQualityRegistry {
   #intervalMs;
+  #peers = new Map();
   #qualities = new Map();
   #timers = new Map();
   #previousInbound = new WeakMap();
+  #listeners = new Set();
 
-  constructor({
-    peerManager,
-    onChange = () => {},
-    intervalMs = DEFAULT_INTERVAL_MS,
-  }) {
-    this.#peerManager = peerManager;
-    this.#onChange = onChange;
+  constructor({ intervalMs = DEFAULT_INTERVAL_MS } = {}) {
     this.#intervalMs = intervalMs;
+  }
+
+  subscribe(listener) {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
   }
 
   qualityFor(roomId) {
     return this.#qualities.get(Number(roomId)) ?? null;
   }
 
-  start(roomId) {
+  registerPeer(roomId, remoteUserId, peerConnection) {
     const id = Number(roomId);
-    if (!id || this.#timers.has(id)) {
+    if (!id || !peerConnection) {
       return;
     }
 
+    let peers = this.#peers.get(id);
+    if (!peers) {
+      peers = new Map();
+      this.#peers.set(id, peers);
+    }
+    peers.set(Number(remoteUserId), peerConnection);
+
+    if (!this.#timers.has(id)) {
+      this.#timers.set(
+        id,
+        setInterval(() => void this.sample(id), this.#intervalMs)
+      );
+    }
     void this.sample(id);
-    this.#timers.set(
-      id,
-      setInterval(() => void this.sample(id), this.#intervalMs)
-    );
   }
 
-  stop(roomId) {
+  unregisterPeer(roomId, remoteUserId, peerConnection = null) {
     const id = Number(roomId);
+    const peers = this.#peers.get(id);
+    const userId = Number(remoteUserId);
+    const registered = peers?.get(userId);
+
+    if (!registered || (peerConnection && registered !== peerConnection)) {
+      return;
+    }
+
+    peers.delete(userId);
+    if (peers.size) {
+      void this.sample(id);
+      return;
+    }
+
+    this.#peers.delete(id);
     const timer = this.#timers.get(id);
     if (timer) {
       clearInterval(timer);
@@ -235,17 +258,9 @@ export default class ConnectionQualityMonitor {
     this.#setQuality(id, null);
   }
 
-  destroy() {
-    for (const timer of this.#timers.values()) {
-      clearInterval(timer);
-    }
-    this.#timers.clear();
-    this.#qualities.clear();
-  }
-
   async sample(roomId) {
     const id = Number(roomId);
-    const peers = this.#peerManager.getRoomPeers(id);
+    const peers = this.#peers.get(id);
     if (!peers?.size) {
       this.#setQuality(id, null);
       return null;
@@ -273,6 +288,17 @@ export default class ConnectionQualityMonitor {
     return quality;
   }
 
+  resetForTesting() {
+    for (const timer of this.#timers.values()) {
+      clearInterval(timer);
+    }
+    this.#timers.clear();
+    this.#peers.clear();
+    this.#qualities.clear();
+    this.#previousInbound = new WeakMap();
+    this.#listeners.clear();
+  }
+
   #setQuality(roomId, quality) {
     const previous = this.#qualities.get(roomId) ?? null;
     if (previous === quality) {
@@ -284,6 +310,11 @@ export default class ConnectionQualityMonitor {
     } else {
       this.#qualities.set(roomId, quality);
     }
-    this.#onChange(roomId, quality);
+
+    for (const listener of this.#listeners) {
+      listener(roomId, quality);
+    }
   }
 }
+
+export const meshConnectionQuality = new MeshConnectionQualityRegistry();
