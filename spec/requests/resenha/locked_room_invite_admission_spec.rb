@@ -32,10 +32,7 @@ RSpec.describe "locked room invite admission" do
 
   it "admits a pending invite once and redeems the lock grant on join" do
     sign_in(owner)
-    post "/resenha/rooms/#{room.id}/invites.json",
-         params: {
-           usernames: [invitee.username],
-         }
+    post "/resenha/rooms/#{room.id}/invites.json", params: { usernames: [invitee.username] }
 
     expect(response.status).to eq(200)
     invite = Resenha::Invite.find_by!(room_id: room.id, user_id: invitee.id)
