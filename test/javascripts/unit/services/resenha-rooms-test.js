@@ -50,49 +50,37 @@ module("Resenha | Unit | Service | resenha-rooms", function (hooks) {
     );
   });
 
-  test(
-    "anonymous directory updates preserve the viewer's room permissions",
-    function (assert) {
-      const service = this.owner.lookup("service:resenha-rooms");
+  test("anonymous directory updates preserve the viewer's room permissions", function (assert) {
+    const service = this.owner.lookup("service:resenha-rooms");
 
-      service.handleDirectoryEvent({
-        type: "created",
-        room: {
-          id: 2,
-          slug: "lounge",
-          active_participants: [],
-          can_manage: true,
-          can_invite: true,
-          chat_available: true,
-        },
-      });
+    service.handleDirectoryEvent({
+      type: "created",
+      room: {
+        id: 2,
+        slug: "lounge",
+        active_participants: [],
+        can_manage: true,
+        can_invite: true,
+        chat_available: true,
+      },
+    });
 
-      service.handleDirectoryEvent({
-        type: "updated",
-        room: {
-          id: 2,
-          slug: "lounge",
-          active_participants: [],
-          locked: true,
-        },
-      });
+    service.handleDirectoryEvent({
+      type: "updated",
+      room: {
+        id: 2,
+        slug: "lounge",
+        active_participants: [],
+        locked: true,
+      },
+    });
 
-      assert.true(
-        service.roomById(2).locked,
-        "applies the shared room update"
-      );
-      assert.true(
-        service.roomById(2).can_manage,
-        "keeps manager permission"
-      );
-      assert.true(
-        service.roomById(2).can_invite,
-        "keeps invite permission"
-      );
-      assert.true(
-        service.roomById(2).chat_available,
-        "keeps user-gated chat state"
-      );
-    }
-  );
+    assert.true(service.roomById(2).locked, "applies the shared room update");
+    assert.true(service.roomById(2).can_manage, "keeps manager permission");
+    assert.true(service.roomById(2).can_invite, "keeps invite permission");
+    assert.true(
+      service.roomById(2).chat_available,
+      "keeps user-gated chat state"
+    );
+  });
 });
