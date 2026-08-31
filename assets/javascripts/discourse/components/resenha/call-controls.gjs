@@ -31,6 +31,7 @@ import { queuePosition } from "../../lib/resenha/speak-queue";
 import ResenhaVideoSettingsModal from "../modal/resenha-video-settings";
 import ResenhaVoiceSettingsModal from "../modal/resenha-voice-settings";
 import ResenhaCallSubmenu from "./call-submenu";
+import ResenhaConnectionQualityBadge from "./connection-quality-badge";
 
 const AUDIO_MENU = "resenha-audio-menu";
 const VIDEO_MENU = "resenha-video-menu";
@@ -613,5 +614,6 @@ export default class ResenhaCallControls extends Component {
         <span aria-hidden="true">&#8203;</span>
       </button>
     {{/if}}
+    <ResenhaConnectionQualityBadge @room={{this.room}} />
   </template>
 }

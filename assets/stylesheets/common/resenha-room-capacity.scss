@@ -39,3 +39,35 @@
   color: var(--danger);
   font-weight: var(--token-font-weight-semibold);
 }
+
+.resenha-connection-quality {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.3em;
+  padding: 0.3em 0.55em;
+  border: 1px solid currentcolor;
+  border-radius: var(--token-radius-full);
+  color: var(--primary-medium);
+  font-size: var(--font-down-2);
+  font-weight: var(--token-font-weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+
+  .d-icon {
+    width: 0.8em;
+    height: 0.8em;
+  }
+
+  &.--good {
+    color: var(--success);
+  }
+
+  &.--fair {
+    color: var(--tertiary);
+  }
+
+  &.--poor {
+    color: var(--danger);
+  }
+}
