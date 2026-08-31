@@ -1,0 +1,4 @@
+tr_TR:
+  resenha:
+    errors:
+      cannot_kick_manager: "Oda moderatörleri ve site yetkilileri odadan çıkarılamaz."
