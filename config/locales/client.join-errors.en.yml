@@ -1,0 +1,5 @@
+en:
+  js:
+    resenha:
+      room:
+        join_failed: "We couldn't join the voice room. Check your connection and try again."
