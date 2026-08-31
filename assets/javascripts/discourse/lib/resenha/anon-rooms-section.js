@@ -2,6 +2,10 @@ import { avatarUrl } from "discourse/lib/avatar-utils";
 import { prioritizeNameInUx } from "discourse/lib/settings";
 import { i18n } from "discourse-i18n";
 import roomIcon, { roomBadge } from "./room-icon";
+import {
+  appendSidebarRoomCapacity,
+  sidebarRoomCapacity,
+} from "./sidebar-room-capacity";
 
 export default function buildAnonRoomsSection(roomsService) {
   return (BaseSection, BaseLink) => {
@@ -16,7 +20,11 @@ export default function buildAnonRoomsSection(roomsService) {
       }
 
       get classNames() {
-        return "resenha-sidebar-link";
+        const classes = ["resenha-sidebar-link"];
+        if (sidebarRoomCapacity(this.room)?.full) {
+          classes.push("resenha-sidebar-link--full");
+        }
+        return classes.join(" ");
       }
 
       get href() {
@@ -24,15 +32,20 @@ export default function buildAnonRoomsSection(roomsService) {
       }
 
       get title() {
-        return (
+        const title =
           this.room.description_excerpt ||
           this.room.name ||
-          i18n("resenha.room.join")
-        );
+          i18n("resenha.room.join");
+
+        return appendSidebarRoomCapacity(title, this.room);
       }
 
       get text() {
         return this.room.name;
+      }
+
+      get badgeText() {
+        return sidebarRoomCapacity(this.room)?.text;
       }
 
       get prefixType() {
