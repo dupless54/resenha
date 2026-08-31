@@ -1,0 +1,4 @@
+en:
+  resenha:
+    errors:
+      cannot_kick_manager: "Room managers and staff cannot be kicked."
