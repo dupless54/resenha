@@ -1,0 +1,16 @@
+en:
+  js:
+    resenha:
+      bans:
+        menu: "Manage bans"
+        title: "Bans — %{room_name}"
+        search_label: "Ban a user"
+        search_placeholder: "Search users"
+        ban: "Ban"
+        unban: "Unban"
+        empty: "No one is banned from this room."
+        banned_by: "Banned by %{username}"
+        confirm_ban: "Ban @%{username} from this room? They will be removed from the active call and will not be able to rejoin until unbanned."
+        confirm_unban: "Unban @%{username} from this room?"
+        banned: "@%{username} was banned from the room."
+        unbanned: "@%{username} was unbanned from the room."
