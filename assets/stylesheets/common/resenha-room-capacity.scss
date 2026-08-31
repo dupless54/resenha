@@ -32,3 +32,10 @@
     }
   }
 }
+
+.resenha-sidebar-link--full .sidebar-section-link-content-badge {
+  border-radius: var(--token-radius-normal);
+  background: var(--danger-low);
+  color: var(--danger);
+  font-weight: var(--token-font-weight-semibold);
+}

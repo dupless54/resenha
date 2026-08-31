@@ -12,6 +12,10 @@ import ResenhaRoomSidebarContextMenu from "discourse/plugins/resenha/discourse/c
 import buildAnonRoomsSection from "../lib/resenha/anon-rooms-section";
 import { humanKeyName } from "../lib/resenha/ptt-utils";
 import roomIcon, { roomBadge } from "../lib/resenha/room-icon";
+import {
+  appendSidebarRoomCapacity,
+  sidebarRoomCapacity,
+} from "../lib/resenha/sidebar-room-capacity";
 import virtualElementFromEvent from "../lib/resenha/virtual-element-from-event";
 
 const LINK_NAME_PREFIX = "resenha-room-";
@@ -146,6 +150,10 @@ export default {
                 classes.push("resenha-sidebar-link--connecting");
               }
 
+              if (sidebarRoomCapacity(this.room)?.full) {
+                classes.push("resenha-sidebar-link--full");
+              }
+
               return classes.join(" ");
             }
 
@@ -155,24 +163,28 @@ export default {
 
             get title() {
               const state = this.resenhaWebrtc.connectionStateFor(this.room.id);
+              let title;
 
               if (state === "connecting") {
-                return i18n("resenha.room.connecting");
+                title = i18n("resenha.room.connecting");
+              } else if (state === "connected") {
+                title = i18n("resenha.room.open_page");
+              } else {
+                title =
+                  this.room.description_excerpt ||
+                  this.room.name ||
+                  i18n("resenha.room.join");
               }
 
-              if (state === "connected") {
-                return i18n("resenha.room.open_page");
-              }
-
-              return (
-                this.room.description_excerpt ||
-                this.room.name ||
-                i18n("resenha.room.join")
-              );
+              return appendSidebarRoomCapacity(title, this.room);
             }
 
             get text() {
               return this.room.name;
+            }
+
+            get badgeText() {
+              return sidebarRoomCapacity(this.room)?.text;
             }
 
             get prefixType() {
