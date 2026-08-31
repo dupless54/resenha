@@ -1,0 +1,5 @@
+en:
+  js:
+    resenha:
+      participant:
+        confirm_kick: "Kick @%{username} from this room? They can rejoin unless you ban them."
