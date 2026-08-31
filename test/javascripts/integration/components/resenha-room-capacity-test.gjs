@@ -156,22 +156,27 @@ module("Integration | Component | Resenha | Room capacity", function (hooks) {
     assert.deepEqual(this.resenhaWebrtc.joinCalls, []);
   });
 
-  test("keeps reconnect available for a participant who already holds a full-room slot", async function (assert) {
-    this.room.full = true;
-    this.room.active_participants.push(
-      participant(this.currentUser.id, this.currentUser.username)
-    );
+  test(
+    "keeps reconnect available for a participant who already holds a full-room slot",
+    async function (assert) {
+      this.room.full = true;
+      this.room.active_participants.push(
+        participant(this.currentUser.id, this.currentUser.username)
+      );
 
-    await render(<template><ResenhaRoomPage @room={{this.room}} /></template>);
+      await render(
+        <template><ResenhaRoomPage @room={{this.room}} /></template>
+      );
 
-    assert.dom(".resenha-room-page__capacity").hasText("4/4");
-    assert.dom(".resenha-room-page__join").isNotDisabled();
-    assert.dom(".resenha-room-page__join").hasText("Join voice room");
+      assert.dom(".resenha-room-page__capacity").hasText("4/4");
+      assert.dom(".resenha-room-page__join").isNotDisabled();
+      assert.dom(".resenha-room-page__join").hasText("Join voice room");
 
-    await click(".resenha-room-page__join");
+      await click(".resenha-room-page__join");
 
-    assert.deepEqual(this.resenhaWebrtc.joinCalls, [1]);
-  });
+      assert.deepEqual(this.resenhaWebrtc.joinCalls, [1]);
+    }
+  );
 
   test("auto join does not bypass the full-room presentation guard", async function (assert) {
     this.room.full = true;
