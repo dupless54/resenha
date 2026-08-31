@@ -1,5 +1,5 @@
 import { module, test } from "qunit";
-import ConnectionQualityMonitor, {
+import {
   aggregateConnectionQuality,
   audioConnectionMetrics,
   classifyConnectionQuality,
@@ -7,6 +7,7 @@ import ConnectionQualityMonitor, {
   CONNECTION_QUALITY_GOOD,
   CONNECTION_QUALITY_POOR,
   CONNECTION_QUALITY_UNKNOWN,
+  MeshConnectionQualityRegistry,
   samplePeerConnectionQuality,
 } from "discourse/plugins/resenha/discourse/lib/resenha/connection-quality";
 
@@ -159,17 +160,12 @@ module("Resenha | Unit | Lib | connection-quality", function () {
     );
   });
 
-  test("monitor is local-only, hides when alone, and reports the worst peer", async function (assert) {
-    const peers = new Map();
+  test("registry follows peer lifecycle and reports the worst peer", async function (assert) {
+    const registry = new MeshConnectionQualityRegistry({ intervalMs: 60_000 });
     const changes = [];
-    const monitor = new ConnectionQualityMonitor({
-      peerManager: { getRoomPeers: () => peers },
-      onChange: (roomId, quality) => changes.push([roomId, quality]),
-    });
+    registry.subscribe((roomId, quality) => changes.push([roomId, quality]));
 
-    assert.strictEqual(await monitor.sample(7), null, "no badge while alone");
-
-    peers.set(2, {
+    const goodPeer = {
       connectionState: "connected",
       async getStats() {
         return statsReport([
@@ -190,14 +186,23 @@ module("Resenha | Unit | Lib | connection-quality", function () {
           },
         ]);
       },
-    });
-    peers.set(3, { connectionState: "disconnected" });
+    };
+    const poorPeer = { connectionState: "disconnected" };
 
-    assert.strictEqual(await monitor.sample(7), CONNECTION_QUALITY_POOR);
-    assert.strictEqual(monitor.qualityFor(7), CONNECTION_QUALITY_POOR);
+    registry.registerPeer(7, 2, goodPeer);
+    registry.registerPeer(7, 3, poorPeer);
+    await registry.sample(7);
+
+    assert.strictEqual(registry.qualityFor(7), CONNECTION_QUALITY_POOR);
     assert.deepEqual(changes.at(-1), [7, CONNECTION_QUALITY_POOR]);
 
-    monitor.stop(7);
-    assert.strictEqual(monitor.qualityFor(7), null);
+    registry.unregisterPeer(7, 3, poorPeer);
+    await registry.sample(7);
+    assert.strictEqual(registry.qualityFor(7), CONNECTION_QUALITY_GOOD);
+
+    registry.unregisterPeer(7, 2, goodPeer);
+    assert.strictEqual(registry.qualityFor(7), null, "hides when alone");
+
+    registry.resetForTesting();
   });
 });
