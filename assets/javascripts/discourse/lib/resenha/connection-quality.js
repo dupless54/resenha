@@ -309,7 +309,6 @@ export class MeshConnectionQualityRegistry {
     this.#qualities.clear();
     this.#sampleTokens.clear();
     this.#previousInbound = new WeakMap();
-    this.#listeners.clear();
   }
 
   #invalidateSamples(roomId) {
