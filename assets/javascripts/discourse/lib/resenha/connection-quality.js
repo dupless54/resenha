@@ -49,7 +49,7 @@ function selectedRoundTripTimeMs(reports) {
   );
   const selectedPair = transport
     ? byId.get(transport.selectedCandidatePairId)
-    : reports.find(
+    : (reports.find(
         (report) =>
           report.type === "candidate-pair" &&
           report.state === "succeeded" &&
@@ -58,7 +58,7 @@ function selectedRoundTripTimeMs(reports) {
       reports.find(
         (report) =>
           report.type === "candidate-pair" && report.state === "succeeded"
-      );
+      ));
 
   const candidateRtt = finiteNumber(selectedPair?.currentRoundTripTime);
   const remoteAudioRtts = reports
@@ -280,9 +280,7 @@ export class MeshConnectionQualityRegistry {
       }
 
       try {
-        qualities.push(
-          await samplePeerConnectionQuality(pc, previousInbound)
-        );
+        qualities.push(await samplePeerConnectionQuality(pc, previousInbound));
       } catch {
         qualities.push(CONNECTION_QUALITY_UNKNOWN);
       }
