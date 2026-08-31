@@ -25,8 +25,8 @@ end
 #
 # Indexes
 #
-#  idx_resenha_room_bans_on_room_and_user       (room_id,user_id) UNIQUE
-#  index_resenha_room_bans_on_banned_by_id       (banned_by_id)
+#  idx_resenha_room_bans_on_room_and_user   (room_id,user_id) UNIQUE
+#  index_resenha_room_bans_on_banned_by_id  (banned_by_id)
 #
 # Foreign Keys
 #
