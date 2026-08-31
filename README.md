@@ -7,21 +7,25 @@ Resenha is a Discourse plugin that adds Discord-style voice rooms powered by Web
 ## Features
 
 - **Sidebar-first UX** — click a room to join/leave, see live participant avatars with speaking indicators, all without a route change.
+- **Small-room mesh policy** — the default room capacity is 4 participants, enforced by the server-side admission contract and surfaced in the client/sidebar. Sites can raise the limit when their transport and bandwidth budget allow it.
 - **Mute, deafen, and per-user volume** — right-click any participant (or use the kebab menu) for audio controls. Room managers can kick participants.
+- **Room locking and persistent bans** — managers can close a room to new arrivals, keep current participants connected, and persistently ban users from a room. A pending manager-issued invite is a one-use server-side admission grant for a locked room and is consumed after a successful join.
 - **Voice settings with mic test** — input/output device pickers, a live input level meter, and an input sensitivity gate that stops transmitting below a chosen level. Preferences persist per device via `localStorage`.
 - **User room creation** — users in the allowed group see a "+" button to create rooms directly from the sidebar; room creators and managers can edit rooms in-app.
 - **Direct calls** — allowed users can call someone from their user card or profile.
 - **Themed audio cues** — synthesized tones for calls, connect/disconnect, user join/leave, and mute/deafen toggles follow each listener's existing **Chat notifications** sound choice. **None**, missing, or legacy choices use **Classic and clean**.
 - **Noise suppression** — optional DTLN-based background noise filtering via WebAssembly. See [Noise Suppression](#noise-suppression).
 - **Live subtitles** — optional viewer-side captions powered by NVIDIA Parakeet speech recognition running locally via WebGPU. See [Live Subtitles](#live-subtitles).
-- **Video and screen sharing** — optional, off by default. Each room gets a full page at `/resenha/r/<slug>` with a tile grid; camera and screen share toggle without renegotiation, and senders only encode toward peers who are actually watching the page. Rooms can opt out individually. See [Video](#video).
+- **Video and screen sharing** — enabled at the site level by default. Each room gets a full page at `/resenha/r/<slug>` with a tile grid; camera and screen share toggle without renegotiation, and senders only encode toward peers who are actually watching the page. Rooms can opt out individually. See [Video](#video).
 - **Video settings with background blur** — a per-room video settings modal with a live preview, camera device picker, and MediaPipe-powered background blur with an adjustable strength slider. See [Background Blur](#background-blur).
+- **Mesh connection health** — local connection-quality status, ICE credential refresh during reconnect, and an explicit reconnecting state make small-room WebRTC failures visible instead of silently hanging.
 - **Pure browser WebRTC** — signaling through Discourse + MessageBus; media stays peer-to-peer, no SFU/MCU required.
-- **Optional LiveKit SFU** — point the plugin at a self-hosted LiveKit server and route all rooms (or individually opted-in rooms) through it for enterprise-scale calls; everything else keeps working identically. See [LiveKit](#livekit-media-server-sfu).
+- **Optional LiveKit SFU** — point the plugin at a self-hosted LiveKit server and route all rooms (or individually opted-in rooms) through it for larger calls; everything else keeps working through the same room/session model. See [LiveKit](#livekit-media-server-sfu).
+- **Optional LiveKit recording** — when explicitly enabled, managers can record calls that are pinned to LiveKit. Recording state is broadcast room-wide, egress metadata is persisted, and completed recordings are surfaced through the existing delivery/admin flow. Mesh calls are never server-side recorded.
 
 ## Installation
 
-1. Clone into your `plugins` directory: `git clone https://github.com/xfalcox/resenha.git plugins/resenha`
+1. Clone into your `plugins` directory: `git clone https://github.com/dupless54/resenha.git plugins/resenha`
 2. Rebuild or restart Discourse.
 3. Enable via **Admin > Settings > Plugins > resenha enabled**.
 
@@ -36,7 +40,8 @@ The plugin seeds a default "Watercooler" room on first enable.
 | `resenha_create_room_allowed_groups` | Groups that can create new rooms (default: admins, moderators, TL2).                 |
 | `resenha_max_rooms_per_user`         | Max rooms per creator (default 5).                                                   |
 | `resenha_participant_ttl_seconds`    | Redis presence TTL in seconds (default 30). Client heartbeat refreshes every 10s.    |
-| `resenha_video_enabled`              | Allow camera video and screen sharing (default off). Rooms can opt out individually. |
+| `resenha_max_room_participants`      | Server-authoritative room capacity (default 4; range 2–200).                         |
+| `resenha_video_enabled`              | Allow camera video and screen sharing (default on). Rooms can opt out individually.  |
 | `resenha_video_max_publishers`       | Max simultaneous video/screen publishers per room (default 8).                       |
 | `resenha_video_background_blur_enabled` | Allow users to blur their camera background (default on; requires video).        |
 | `resenha_stun_servers`               | STUN server addresses (pipe-separated).                                              |
@@ -44,10 +49,12 @@ The plugin seeds a default "Watercooler" room on first enable.
 | `resenha_livekit_url`                | WebSocket URL of a self-hosted LiveKit server (empty = mesh only).                   |
 | `resenha_livekit_api_key` / `_api_secret` | LiveKit API credentials used to sign short-lived room tokens.                   |
 | `resenha_livekit_room_policy`        | Which rooms use LiveKit: `disabled` (default), `per_room`, or `all_rooms`.           |
+| `resenha_livekit_recording_enabled`  | Enable server-side recording for calls pinned to LiveKit (default off).              |
+| `resenha_livekit_recording_filepath` | Base LiveKit egress filepath template; Resenha appends a random capability suffix.   |
 
 ## Video
 
-When `resenha_video_enabled` is on (and the room's own video toggle is too), the room view at `/resenha/r/<slug>` shows a video grid alongside the usual controls. Audio joins stay sidebar-first and unchanged; video lives on the page.
+When `resenha_video_enabled` is on (the default) and the room's own video toggle is too, the room view at `/resenha/r/<slug>` shows a video grid alongside the usual controls. Audio joins stay sidebar-first and unchanged; video lives on the page.
 
 - Still pure mesh: a video m-line is pre-negotiated on every peer connection, so toggling the camera or a screen share is a `replaceTrack` with no renegotiation.
 - Senders attach video only toward participants currently on the room page (`watching_video` presence flag) — every skipped peer saves a full encoder session.
@@ -90,8 +97,9 @@ The script pins the `@mediapipe/tasks-vision` npm version and the model version,
 By default media is pure peer-to-peer, which is ideal for small rooms but scales upstream bandwidth with room size. Deploy your own [LiveKit](https://livekit.io) server and set `resenha_livekit_url`, `resenha_livekit_api_key`, `resenha_livekit_api_secret`, and `resenha_livekit_room_policy` to route rooms through it — each participant then publishes every track exactly once, whatever the room size.
 
 - The server picks each call's transport when its first participant joins and pins it for the whole call; a room is never split across transports, and setting changes only affect the next call.
-- Presence, sessions, stats, mute/deafen/PTT, noise suppression, and background blur are transport-independent — they behave identically on both paths.
+- Presence, sessions, stats, mute/deafen/PTT, noise suppression, background blur, locking, bans, and the admission contract remain server-authoritative and transport-independent.
 - The pinned `livekit-client` SDK is vendored under `public/javascripts/livekit/` (rebuild with `scripts/build-livekit-bundle.sh`) and is only ever loaded in the browser for LiveKit-routed rooms — mesh installs ship zero LiveKit bytes.
+- Recording is opt-in with `resenha_livekit_recording_enabled`. It is available only when the current call is pinned to LiveKit; Resenha uses LiveKit egress, broadcasts the active recording state to participants, persists each recording row, reconciles missed webhook completions, and delivers completed output through the existing requester/admin flow.
 
 See [docs/livekit.md](docs/livekit.md) for the full deployment runbook (provisioning, firewall/CSP notes, verification, emergency levers) and the manual browser checklist.
 
@@ -153,13 +161,16 @@ bin/lint plugins/resenha                # JS/SCSS/Ruby lint
 Key entry points:
 
 - `app/controllers/resenha/rooms_controller.rb` — room CRUD, signaling relay, participant state (mute/deafen/video/watching)
+- `app/controllers/resenha/room_admissions_controller.rb` — server-authoritative room admission, including one-use locked-room invite redemption
 - `app/controllers/resenha/page_controller.rb` — serves the full-page room view at `/resenha/r/:slug`
-- `lib/resenha/guardian_extension.rb` — authorization (group-based access and room creation permissions)
+- `lib/resenha/guardian_extension.rb` — authorization, lock/bans, invitation admission, group-based access, and room creation permissions
+- `app/services/resenha/recording_manager.rb` — LiveKit-only recording lifecycle, broadcast state, persistence, reconciliation, and delivery
 - `assets/javascripts/discourse/app/services/resenha-webrtc.js` — WebRTC orchestration, audio controls, video/screen-share publishing, sound effects
 - `assets/javascripts/discourse/initializers/resenha-sidebar.js` — sidebar section, click/context-menu handlers
 - `assets/javascripts/discourse/components/resenha/room-page.gjs` — room page: tile grid, call controls, watching lifecycle
 
 ## Known Limitations
 
-- The default peer-to-peer topology means large rooms may hit browser limits; rooms that outgrow it need a [LiveKit server](docs/livekit.md).
-- No call recording or moderation tools beyond kick and the admin "End call" action.
+- The default peer-to-peer topology is intentionally tuned for small rooms (4 participants by default). Increasing the capacity increases each mesh participant's upload/download and browser peer-connection load; rooms that outgrow mesh should use a [LiveKit server](docs/livekit.md).
+- Server-side call recording is not available for mesh calls. Recording requires `resenha_livekit_recording_enabled` and a call already pinned to LiveKit.
+- Room moderation currently includes kick, room lock/unlock, persistent per-room bans/unbans, and the admin "End call" action; broader account/community moderation remains Discourse's responsibility.
